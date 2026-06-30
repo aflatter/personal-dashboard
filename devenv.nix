@@ -7,11 +7,11 @@
   # `vp env off` — see README.md.
   languages.javascript = {
     enable = true;
-    package = pkgs.nodejs_24;
-    npm.enable = true;
+    package = pkgs.nodejs-slim_26;
+    pnpm.enable = true;
   };
 
   enterShell = ''
-    echo "personal-dashboard · node $(node --version)"
+    echo "personal-dashboard · node $(node --version) · pnpm $(pnpm --version)"
   '';
 }

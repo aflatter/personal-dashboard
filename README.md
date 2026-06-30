@@ -16,10 +16,10 @@ and an Arbeitszeit hours breakdown.
 ## Toolchain
 
 - **[devenv.sh](https://devenv.sh)** manages system dependencies. It pins
-  **Node.js 24** from nixpkgs (`devenv.nix`). This is the single owner of the
-  runtime.
+  **Node.js 26** (`nodejs-slim`) and **pnpm** from nixpkgs (`devenv.nix`). This
+  is the single owner of the runtime and package manager.
 - **[Vite+](https://viteplus.dev)** (`vp`) is the build/test/lint toolchain,
-  added as a local dev dependency and driven through `npm` scripts.
+  added as a local dev dependency and driven through `pnpm` scripts.
   - Vite+'s **env feature is disabled**: its environment manager (`vp env`) can
     install and shim a Node runtime globally, but here **devenv owns Node**, so
     we run Vite+ in system-first mode. If you have Vite+ installed globally,
@@ -34,21 +34,21 @@ and an Arbeitszeit hours breakdown.
 ## Getting started
 
 ```bash
-devenv shell      # Node 24 from nixpkgs (or use your own modern Node)
-npm install
-npm run dev        # vp dev  — http://localhost:5173
+devenv shell      # Node 26 (nodejs-slim) + pnpm from nixpkgs
+pnpm install
+pnpm dev          # vp dev  — http://localhost:5173
 ```
 
 ### Scripts
 
 | Script              | What it does                          |
 | ------------------- | ------------------------------------- |
-| `npm run dev`       | `vp dev` — dev server                 |
-| `npm run build`     | `vp build` — production build         |
-| `npm run preview`   | `vp preview` — serve the build        |
-| `npm test`          | `vp test` — domain unit tests (Vitest)|
-| `npm run lint`      | `vp lint` — oxlint                     |
-| `npm run typecheck` | `tsc --noEmit`                         |
+| `pnpm dev`          | `vp dev` — dev server                 |
+| `pnpm build`        | `vp build` — production build         |
+| `pnpm preview`      | `vp preview` — serve the build        |
+| `pnpm test`         | `vp test` — domain unit tests (Vitest)|
+| `pnpm lint`         | `vp lint` — oxlint                     |
+| `pnpm typecheck`    | `tsc --noEmit`                         |
 
 ## Architecture
 
