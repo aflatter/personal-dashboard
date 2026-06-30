@@ -1,0 +1,48 @@
+@import 'tailwindcss';
+
+/* Design tokens from the handoff SPEC.md, exposed as Tailwind theme variables.
+   Data-driven colors (per-status, per-client tints) live in the domain layer
+   as constants and are applied inline — they are not utilities. */
+@theme {
+  --color-page: #fbfaf8;
+  --color-card: #ffffff;
+  --color-card-border: #eceae6;
+  --color-hairline: #f0ede7;
+
+  --color-ink: #1b1b1a; /* text primary */
+  --color-secondary: #6e6d68; /* subtitles, meta */
+  --color-muted: #9a9a95; /* timestamps, button rest */
+  --color-faint: #b4b1a8; /* chart axis ticks */
+
+  --color-persoenlich: #4f6bd8;
+  --color-tevim: #c77a2e;
+  --color-immobilien: #3e8e6b;
+
+  --color-unread: #4f6bd8; /* inbox unread series + number */
+  --color-total-num: #5a6473; /* inbox total number */
+  --color-bank: #b98a3a; /* unchecked hero number */
+  --color-success: #3e8e6b;
+
+  --font-sans: 'Manrope', system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, monospace;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--color-page);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Every numeric figure uses tabular mono per SPEC. */
+.tnum {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
