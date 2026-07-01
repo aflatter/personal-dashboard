@@ -1,9 +1,8 @@
 {
   "name": "personal-dashboard",
-  "private": true,
   "version": "0.1.0",
+  "private": true,
   "type": "module",
-  "packageManager": "pnpm@11.5.3",
   "scripts": {
     "dev": "vp dev",
     "build": "vp build",
@@ -11,7 +10,8 @@
     "test": "vp test",
     "lint": "vp lint",
     "format": "vp format",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "prepare": "vp config --no-agent"
   },
   "dependencies": {
     "@base-ui/react": "^1.6.0",
@@ -27,5 +27,6 @@
     "typescript": "^6.0.3",
     "vite-plus": "^0.2.1",
     "vitest": "^4.1.9"
-  }
+  },
+  "packageManager": "pnpm@11.5.3"
 }

@@ -1,11 +1,14 @@
-import { defineConfig } from 'vite-plus';
-import react from '@vitejs/plugin-react';
-import tailwindcss from '@tailwindcss/vite';
+import { defineConfig } from "vite-plus";
+import react from "@vitejs/plugin-react";
+import tailwindcss from "@tailwindcss/vite";
 
 export default defineConfig({
+  staged: {
+    "*": "vp check --fix",
+  },
   plugins: [react(), tailwindcss()],
   test: {
     // Domain logic is pure — no DOM needed.
-    include: ['src/**/*.test.ts'],
+    include: ["src/**/*.test.ts"],
   },
 });
