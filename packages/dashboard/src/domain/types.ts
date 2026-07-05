@@ -1,7 +1,7 @@
 // Core domain model for the personal dashboard.
 // Pure types — no React, no rendering concerns.
 //
-// Entity types shared with the collector service live in @dash/shared and are
+// Entity types originate in the collector (@dash/collector/contract) and are
 // re-exported here so the domain has one import surface. Types below are the
 // SPA's internal shapes that differ from the wire contract.
 

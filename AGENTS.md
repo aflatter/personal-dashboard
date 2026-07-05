@@ -48,32 +48,37 @@ Before handing back changes, ensure `pnpm typecheck`, `pnpm lint`, and
 
 ## Architecture — keep these boundaries
 
-A pnpm workspace: the **collector** service owns data, the **dashboard** SPA
-renders it, and **shared** holds the wire contract between them.
+A pnpm workspace: the **collector** service owns data and exposes a **tRPC**
+API; the **dashboard** SPA is a typed tRPC client. There is no shared types
+package — the collector's `AppRouter` _is_ the contract, and the SPA infers its
+types from it (type-only import; no collector code is bundled).
 
 ```
 packages/
-  shared/        Wire-contract types only (StateResponse, DayPoint, InboxState,
-                 BankState, SourceStatus). No deps — imported by both sides.
   collector/     Node service (Node 26 runs .ts directly — no build). Owns
                  acquisition, day-bucketed history, and durable state in
-                 node:sqlite; exposes a 127.0.0.1 JSON API.
-                 src/: store/db, seed, state, api/server, main (+ sources/ in Stage 3).
-  dashboard/     The SPA (Vite + React) — a thin client over the collector.
+                 node:sqlite; serves a tRPC API on 127.0.0.1 (loopback).
+                 src/: contract (data types), trpc, router (the API), store/db,
+                 seed, state, main (+ sources/ in Stage 3).
+                 Exports: `.` → AppRouter type · `./contract` → data types.
+  dashboard/     The SPA (Vite + React) — a typed tRPC client over the collector.
     src/
       domain/        Pure TS — NO React, NO colors/strings. Derivations (inbox,
                      counter, rent, tax, bank, hours) return semantic/numeric
                      view-models. Colocated *.test.ts.
       presentation/  Pure view primitives — Intl de-DE formatting + colour
                      palette (lighten/clientTint). NO React, no domain logic.
-      api/           Typed client for the collector; maps the wire contract to
-                     domain shapes.
-      store/         useDashboard: fetch + poll the collector, POST mutations,
+      api/           trpc.ts (typed client) + client.ts (maps procedure results
+                     to domain shapes).
+      store/         useDashboard: fetch + poll the collector, run mutations,
                      cache to localStorage. Exposed via DashboardContext.
       components/
         ui/          Presentational ONLY — props in, no store, no derivations.
         *.tsx        Container cards: read the store, call domain fns, render ui/.
 ```
+
+New API surface? Add a procedure to `collector/src/router.ts`; the SPA's typed
+client picks it up automatically — never hand-write request/response types.
 
 Rules:
 
@@ -87,8 +92,9 @@ Rules:
   then hand plain props to `ui/*`.
 - **Domain logic is pure and lives in `dashboard/src/domain`** — add new
   derivations there with a colocated `*.test.ts`, not inside components.
-- **The collector is the source of truth.** The SPA never owns data; it fetches
-  `/api/state` and POSTs mutations. `localStorage` is only a render cache.
+- **The collector is the source of truth.** The SPA never owns data; it calls
+  tRPC procedures (`state` query; `rentDone`/`taxDone`/`settings`/`sync`
+  mutations, all returning fresh state). `localStorage` is only a render cache.
 - Functional components + hooks only. **Composition over inheritance.**
 
 ## Conventions
