@@ -34,11 +34,11 @@ full overview; this file is the working contract for agents.
 
 ## Commands (run inside `devenv shell`)
 
-| Command          | What it does                          |
-| ---------------- | ------------------------------------- |
-| `pnpm dev`       | `vp dev` — dev server (localhost:5173)|
-| `pnpm build`     | `vp build` — production build         |
-| `pnpm test`      | `vp test` — Vitest (domain unit tests)|
+| Command          | What it does                           |
+| ---------------- | -------------------------------------- |
+| `pnpm dev`       | `vp dev` — dev server (localhost:5173) |
+| `pnpm build`     | `vp build` — production build          |
+| `pnpm test`      | `vp test` — Vitest (domain unit tests) |
 | `pnpm lint`      | `vp lint` — oxlint                     |
 | `pnpm typecheck` | `tsc --noEmit`                         |
 
@@ -51,9 +51,12 @@ A pure domain core, with presentational components kept separate from logic:
 
 ```
 src/
-  domain/        Pure TypeScript — the domain model. NO React.
+  domain/        Pure TypeScript — the domain model. NO React, NO colors/strings.
                  entities (types.ts) + derivations (inbox, counter, rent, tax,
-                 bank, hours) + de-DE formatting. Colocated *.test.ts.
+                 bank, hours) returning semantic/numeric view-models (status
+                 enums, deltaDirection, clientIndex/tintLevel). Colocated *.test.ts.
+  presentation/  Pure view primitives — Intl-based de-DE formatting + color
+                 palette (lighten/clientTint). NO React, no domain logic.
   store/         useDashboard hook (seeded state + localStorage + actions)
                  exposed via DashboardContext.
   components/
@@ -63,8 +66,11 @@ src/
 
 Rules:
 
-- **`components/ui/*` import only React and domain _types_** — never the store,
-  never derivation functions. They receive plain props.
+- **`components/ui/*` import only React, domain _types_, and `src/presentation`
+  helpers** — never the store, never domain derivation functions. They receive
+  plain props. (The status/delta cards `StatusSentence`/`WeekDelta` map a
+  domain enum to German copy + a tone class — that presentation mapping lives in
+  the component, never in `domain/`.)
 - **Container cards** (`InboxCard`, `BankCard`, `RentCard`, `TaxCard`,
   `HoursCard`, …) read state via `useDashboardStore()`, run domain functions,
   then hand plain props to `ui/*`.
@@ -74,11 +80,23 @@ Rules:
 
 ## Conventions
 
-- **de-DE everywhere**: German copy and formatting (comma decimals, e.g.
-  `18,5 h`; dates like `24.06.2026`). Use the helpers in `src/domain/format.ts`.
+- **Language — English in code, German in the UI.** All code identifiers are
+  English: type/enum values (e.g. `CounterStatus = 'current' | 'due-soon' |
+'overdue'`, `TaskStatusKind`, `DeltaDirection`), variable/function names, and
+  CSS token names (`--color-personal`, `--color-real-estate`; brand names like
+  `--color-tevim` are kept as-is). German (de-DE) appears **only** in
+  user-facing display strings, locale formatting, and seed data — e.g. card copy
+  (`"✓ aktuell"`, `" überfällig"`), column labels (`"Persönlich"`,
+  `"Immobilien"`), and the `Intl` formatters. Never encode German words in an
+  enum value, key, or identifier.
+- **de-DE formatting**: comma decimals (`18,5 h`) and dates (`24.06.2026`) via
+  the `Intl`-based helpers in `src/presentation/format.ts` — do not hand-roll
+  formatting or month/day name tables.
 - **Styling**: Tailwind v4. Design tokens live in `src/index.css` under
-  `@theme`. Data-driven colors (status / client tints) stay inline or as
-  constants in `src/domain/constants.ts`, not as Tailwind utilities.
+  `@theme`. Semantic colors (status, delta, life-area accents) are tokens used
+  as utilities (`text-status-due`, `text-personal`); the domain never emits
+  colors — it returns a semantic enum/index that a component or
+  `src/presentation/palette.ts` maps to a class or computed tint.
 - **Base UI** (`@base-ui/react`) is the unstyled component foundation
   (Button, Popover, Switch, NumberField).
 - **Ambient TS types**: reference `vite-plus/client` (not `vite/client`) — it
