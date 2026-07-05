@@ -130,7 +130,8 @@ Rules:
   proxies `/api` → the collector).
 - **Sources degrade gracefully.** A source without its secret (or MoneyMoney
   without `MONEYMONEY=1`) is skipped, and any poll failure marks only that
-  source `ok:false` while the rest keep serving. Enable real data with
-  `secretspec run -- node packages/collector/src/main.ts` (Fastmail/Toggl tokens
-  declared in `secretspec.toml`, resolved from 1Password) plus `MONEYMONEY=1`
-  (needs MoneyMoney unlocked + the collector granted macOS Automation permission).
+  source `ok:false` while the rest keep serving. Secrets are declared in
+  `secretspec.toml` and loaded in-process at boot via the `secretspec` Node SDK
+  (`packages/collector/src/secrets.ts`) — configure the provider once with
+  `secretspec config` (1Password), or override via `SECRETSPEC_PROVIDER`. Enable
+  MoneyMoney with `MONEYMONEY=1` (needs it unlocked + macOS Automation permission).
