@@ -34,39 +34,50 @@ full overview; this file is the working contract for agents.
 
 ## Commands (run inside `devenv shell`)
 
-| Command          | What it does                           |
-| ---------------- | -------------------------------------- |
-| `pnpm dev`       | `vp dev` — dev server (localhost:5173) |
-| `pnpm build`     | `vp build` — production build          |
-| `pnpm test`      | `vp test` — Vitest (domain unit tests) |
-| `pnpm lint`      | `vp lint` — oxlint                     |
-| `pnpm typecheck` | `tsc --noEmit`                         |
+| Command          | What it does                                       |
+| ---------------- | -------------------------------------------------- |
+| `devenv up`      | collector (`:4319`) + dashboard (`:5173`) together |
+| `pnpm dev`       | `vp dev packages/dashboard` — SPA dev server       |
+| `pnpm build`     | `vp build packages/dashboard` — production build   |
+| `pnpm test`      | `vp run -r test` — Vitest across packages          |
+| `pnpm lint`      | `vp lint` — oxlint                                 |
+| `pnpm typecheck` | `vp run -r typecheck` — `tsc --noEmit` per package |
 
 Before handing back changes, ensure `pnpm typecheck`, `pnpm lint`, and
 `pnpm test` are green (or `vp check && vp test`).
 
 ## Architecture — keep these boundaries
 
-A pure domain core, with presentational components kept separate from logic:
+A pnpm workspace: the **collector** service owns data, the **dashboard** SPA
+renders it, and **shared** holds the wire contract between them.
 
 ```
-src/
-  domain/        Pure TypeScript — the domain model. NO React, NO colors/strings.
-                 entities (types.ts) + derivations (inbox, counter, rent, tax,
-                 bank, hours) returning semantic/numeric view-models (status
-                 enums, deltaDirection, clientIndex/tintLevel). Colocated *.test.ts.
-  presentation/  Pure view primitives — Intl-based de-DE formatting + color
-                 palette (lighten/clientTint). NO React, no domain logic.
-  store/         useDashboard hook (seeded state + localStorage + actions)
-                 exposed via DashboardContext.
-  components/
-    ui/          Presentational ONLY — props in, no store, no derivations.
-    *.tsx        Container cards: read the store, call domain fns, render ui/.
+packages/
+  shared/        Wire-contract types only (StateResponse, DayPoint, InboxState,
+                 BankState, SourceStatus). No deps — imported by both sides.
+  collector/     Node service (Node 26 runs .ts directly — no build). Owns
+                 acquisition, day-bucketed history, and durable state in
+                 node:sqlite; exposes a 127.0.0.1 JSON API.
+                 src/: store/db, seed, state, api/server, main (+ sources/ in Stage 3).
+  dashboard/     The SPA (Vite + React) — a thin client over the collector.
+    src/
+      domain/        Pure TS — NO React, NO colors/strings. Derivations (inbox,
+                     counter, rent, tax, bank, hours) return semantic/numeric
+                     view-models. Colocated *.test.ts.
+      presentation/  Pure view primitives — Intl de-DE formatting + colour
+                     palette (lighten/clientTint). NO React, no domain logic.
+      api/           Typed client for the collector; maps the wire contract to
+                     domain shapes.
+      store/         useDashboard: fetch + poll the collector, POST mutations,
+                     cache to localStorage. Exposed via DashboardContext.
+      components/
+        ui/          Presentational ONLY — props in, no store, no derivations.
+        *.tsx        Container cards: read the store, call domain fns, render ui/.
 ```
 
 Rules:
 
-- **`components/ui/*` import only React, domain _types_, and `src/presentation`
+- **`components/ui/*` import only React, domain _types_, and `presentation`
   helpers** — never the store, never domain derivation functions. They receive
   plain props. (The status/delta cards `StatusSentence`/`WeekDelta` map a
   domain enum to German copy + a tone class — that presentation mapping lives in
@@ -74,8 +85,10 @@ Rules:
 - **Container cards** (`InboxCard`, `BankCard`, `RentCard`, `TaxCard`,
   `HoursCard`, …) read state via `useDashboardStore()`, run domain functions,
   then hand plain props to `ui/*`.
-- **Domain logic is pure and lives in `src/domain`** — add new derivations
-  there with a colocated `*.test.ts`, not inside components.
+- **Domain logic is pure and lives in `dashboard/src/domain`** — add new
+  derivations there with a colocated `*.test.ts`, not inside components.
+- **The collector is the source of truth.** The SPA never owns data; it fetches
+  `/api/state` and POSTs mutations. `localStorage` is only a render cache.
 - Functional components + hooks only. **Composition over inheritance.**
 
 ## Conventions
@@ -102,6 +115,9 @@ Rules:
 - **Ambient TS types**: reference `vite-plus/client` (not `vite/client`) — it
   resolves under pnpm's strict `node_modules` layout, where plain `vite` is not
   hoisted.
-- **Data is seeded mock + localStorage** (`src/store/seed.ts`). Real
-  integrations (IMAP/Exchange, MoneyMoney, time-tracking) are out of scope;
-  wire them behind `useDashboard` without touching the presentational layer.
+- **Data comes from the collector** (`node:sqlite`; seeded on first run via
+  `packages/collector/src/seed.ts`). Real source adapters (JMAP/Fastmail,
+  MoneyMoney via AppleScript, Toggl) live in `packages/collector/src/sources`
+  behind a common port — add them there, never in the SPA. Run both services
+  with `devenv up` (collector on `:4319`, dashboard on `:5173`, which proxies
+  `/api` → the collector).
