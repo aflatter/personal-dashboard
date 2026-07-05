@@ -1,10 +1,11 @@
-import type { TaskLineView } from '../../domain';
-import { Card } from './Card';
-import { cx } from './cx';
-import { ActionButton } from './ActionButton';
-import { SuccessBadge } from './SuccessBadge';
-import { StatusSentence } from './StatusSentence';
-import { CardFooterHairline } from './CardFooterHairline';
+import type { TaskLine } from "../../domain";
+import { formatDayMonth } from "../../presentation";
+import { Card } from "./Card";
+import { cx } from "./cx";
+import { ActionButton } from "./ActionButton";
+import { SuccessBadge } from "./SuccessBadge";
+import { StatusSentence } from "./StatusSentence";
+import { CardFooterHairline } from "./CardFooterHairline";
 
 /**
  * The shared day-counter card (Mietbuchhaltung / Firmenbelege): title + a
@@ -19,7 +20,7 @@ export function TaskCard({
   titleTruncate = false,
 }: {
   title: string;
-  line: TaskLineView;
+  line: TaskLine;
   doneLabel: string;
   actionLabel: string;
   onAction: () => void;
@@ -30,8 +31,8 @@ export function TaskCard({
       <div className="flex justify-between items-center gap-2 mb-[6px]">
         <div
           className={cx(
-            'text-[15px] font-semibold min-w-0',
-            titleTruncate && 'whitespace-nowrap overflow-hidden text-ellipsis',
+            "text-[15px] font-semibold min-w-0",
+            titleTruncate && "whitespace-nowrap overflow-hidden text-ellipsis",
           )}
         >
           {title}
@@ -43,7 +44,9 @@ export function TaskCard({
         )}
       </div>
       <StatusSentence line={line} />
-      <CardFooterHairline>zuletzt {line.last}</CardFooterHairline>
+      <CardFooterHairline>
+        zuletzt {line.doneAt != null ? formatDayMonth(line.doneAt) : "—"}
+      </CardFooterHairline>
     </Card>
   );
 }

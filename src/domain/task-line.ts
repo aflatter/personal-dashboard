@@ -1,24 +1,24 @@
 /**
- * View model for the text-status line shared by the Mietbuchhaltung and
- * Firmenbelege cards: a sentence with one emphasized, colored middle part.
- * `done` marks the calm/green state (badge instead of an action button).
+ * Semantic state shared by the Mietbuchhaltung and Firmenbelege cards. The domain
+ * decides *which* state applies and the relevant day count; the view turns this
+ * into the German sentence and tone color (see the `StatusSentence` component).
  */
-export interface TaskLineView {
+export type TaskStatusKind =
+  /** Calm: time since the task was last done (e.g. "Letzter Upload vor …"). */
+  | "calm-since"
+  /** Calm: time until the next due date (e.g. "Nächste Fälligkeit in …"). */
+  | "calm-next-due"
+  /** Due but within grace / thresholds. */
+  | "due"
+  /** Past the grace window / overdue threshold. */
+  | "overdue";
+
+export interface TaskLine {
+  kind: TaskStatusKind;
+  /** The day count relevant to `kind` (since done, until due, or past due). */
+  days: number;
+  /** Calm/green states render a badge instead of an action button. */
   done: boolean;
-  linePre: string;
-  lineEm: string;
-  lineEmColor: string;
-  linePost: string;
-  /** de-DE last-done date, or "—" when never done. */
-  last: string;
-}
-
-/** German day word: "Tag" (1) vs dative "Tagen" — used after "in"/"vor". */
-export function tageDative(n: number): string {
-  return n === 1 ? '1 Tag' : `${n} Tagen`;
-}
-
-/** German day word: "Tag" (1) vs nominative "Tage" — used before "fällig". */
-export function tageNominative(n: number): string {
-  return n === 1 ? '1 Tag' : `${n} Tage`;
+  /** Last-done timestamp, or null when never done. */
+  doneAt: number | null;
 }

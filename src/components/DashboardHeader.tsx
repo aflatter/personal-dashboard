@@ -1,6 +1,6 @@
-import { formatClock, formatHeaderDate } from '../domain';
-import { useDashboardStore } from '../store/DashboardContext';
-import { SettingsPopover } from './SettingsPopover';
+import { formatClock, formatHeaderDate } from "../presentation";
+import { useDashboardStore } from "../store/DashboardContext";
+import { SettingsPopover } from "./SettingsPopover";
 
 /** Page header: greeting + live date/clock + settings. */
 export function DashboardHeader() {

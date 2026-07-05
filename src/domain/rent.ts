@@ -1,6 +1,5 @@
-import { DAY } from './constants';
-import { formatDayMonth } from './format';
-import { tageDative, tageNominative, type TaskLineView } from './task-line';
+import { DAY } from "./constants";
+import type { TaskLine } from "./task-line";
 
 /** The n-th weekday (Mon–Fri) of a given month, or null if it doesn't exist. */
 export function nthWorkday(year: number, month: number, n: number): Date | null {
@@ -25,7 +24,7 @@ const GRACE_DAYS = 5;
  * a 5-day grace window before it counts as overdue. Calm while the current
  * cycle is done or the due date hasn't arrived yet.
  */
-export function rentCalc(now: number, rentDoneAt: number | null): TaskLineView {
+export function rentCalc(now: number, rentDoneAt: number | null): TaskLine {
   const nowDate = new Date(now);
   const year = nowDate.getFullYear();
   const month = nowDate.getMonth();
@@ -39,31 +38,17 @@ export function rentCalc(now: number, rentDoneAt: number | null): TaskLineView {
 
   const isDoneCycle = rentDoneAt != null && new Date(rentDoneAt) >= dueDate;
   const beforeDue = today < dueDate;
-  const last = rentDoneAt != null ? formatDayMonth(rentDoneAt) : '—';
-  const daysUntil = (target: Date) => Math.max(0, Math.ceil((target.getTime() - today.getTime()) / DAY));
+  const daysUntil = (target: Date) =>
+    Math.max(0, Math.ceil((target.getTime() - today.getTime()) / DAY));
 
   // Calm: this cycle is handled, or the next due date hasn't arrived.
   if (isDoneCycle || beforeDue) {
     const target = isDoneCycle ? nextDue : dueDate;
-    return {
-      done: true,
-      linePre: 'Nächste Fälligkeit in ',
-      lineEm: tageDative(daysUntil(target)),
-      lineEmColor: '#3E8E6B',
-      linePost: '',
-      last,
-    };
+    return { kind: "calm-next-due", days: daysUntil(target), done: true, doneAt: rentDoneAt };
   }
 
   // Urgent: past due and not done this cycle.
   const daysOverdue = Math.max(0, Math.ceil((today.getTime() - dueDate.getTime()) / DAY));
   const overdue = today > graceEnd;
-  return {
-    done: false,
-    linePre: '',
-    lineEm: tageNominative(daysOverdue),
-    lineEmColor: overdue ? '#C2453A' : '#C9991F',
-    linePost: overdue ? ' überfällig' : ' fällig',
-    last,
-  };
+  return { kind: overdue ? "overdue" : "due", days: daysOverdue, done: false, doneAt: rentDoneAt };
 }

@@ -1,8 +1,8 @@
 // Core domain model for the personal dashboard.
 // Pure types — no React, no rendering concerns.
 
-export type InboxAccount = 'personal' | 'work';
-export type MailProtocol = 'IMAP' | 'Exchange';
+export type InboxAccount = "personal" | "work";
+export type MailProtocol = "IMAP" | "Exchange";
 
 /** A mail inbox we track for Inbox-Zero: both total and unread matter. */
 export interface Inbox {
@@ -38,13 +38,13 @@ export interface Bank {
   lastCheckedAt: number;
 }
 
-export type CounterStatus = 'aktuell' | 'fällig bald' | 'überfällig';
+export type CounterStatus = "current" | "due-soon" | "overdue";
 
 /** User-configurable thresholds and display options (SPEC "tweaks"). */
 export interface Settings {
-  /** Days until a counter is "überfällig". */
+  /** Days until a counter is `overdue`. */
   overdueThreshold: number;
-  /** Days until a counter is "fällig bald". */
+  /** Days until a counter is `due-soon`. */
   dueSoonThreshold: number;
   /** Show seconds in the header clock. */
   clockSeconds: boolean;

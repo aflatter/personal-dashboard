@@ -1,5 +1,4 @@
-import type { Inbox } from './types';
-import { DELTA_DOWN, DELTA_FLAT, DELTA_UP } from './constants';
+import type { Inbox } from "./types";
 
 /** Chart plot box (SVG user units), matching the design viewBox 0 0 330 72. */
 const PLOT = { x0: 2, x1: 328, yTop: 10, yBase: 56 } as const;
@@ -24,11 +23,14 @@ export function buildSeries(values: number[], max: number): SeriesGeom {
     const y = yBase - (Math.max(0, v) / safeMax) * (yBase - yTop);
     return [round(x), round(y)] as const;
   });
-  const line = points.map((p) => `${p[0]},${p[1]}`).join(' ');
-  const area = `M${points.map((p) => `${p[0]},${p[1]}`).join(' L')} L${round(x1)},${round(yBase)} L${round(x0)},${round(yBase)} Z`;
+  const line = points.map((p) => `${p[0]},${p[1]}`).join(" ");
+  const area = `M${points.map((p) => `${p[0]},${p[1]}`).join(" L")} L${round(x1)},${round(yBase)} L${round(x0)},${round(yBase)} Z`;
   const last = points[points.length - 1];
   return { line, area, ex: last[0], ey: last[1] };
 }
+
+/** Direction of the week-over-week unread change (down = fewer unread = good). */
+export type DeltaDirection = "down" | "up" | "flat";
 
 export interface InboxView {
   unread: number;
@@ -38,9 +40,7 @@ export interface InboxView {
   axisMax: number;
   /** Signed change vs ~one week ago (negative = fewer unread = good). */
   delta: number;
-  /** e.g. "▼ 2 ggü. Vorwoche"; only meaningful when `hasDelta`. */
-  deltaText: string;
-  deltaColor: string;
+  deltaDirection: DeltaDirection;
   hasDelta: boolean;
 }
 
@@ -55,8 +55,7 @@ export function inboxView(inbox: Inbox): InboxView {
   // Compare against the point ~7 days ago (8 back, since today is included).
   const prevIndex = Math.max(0, unreadHistory.length - 8);
   const delta = inbox.unread - unreadHistory[prevIndex];
-  const arrow = delta < 0 ? '▼' : delta > 0 ? '▲' : '■';
-  const deltaColor = delta < 0 ? DELTA_DOWN : delta > 0 ? DELTA_UP : DELTA_FLAT;
+  const deltaDirection: DeltaDirection = delta < 0 ? "down" : delta > 0 ? "up" : "flat";
 
   return {
     unread: inbox.unread,
@@ -65,8 +64,7 @@ export function inboxView(inbox: Inbox): InboxView {
     totalSeries: buildSeries(totalHistory, axisMax),
     axisMax,
     delta,
-    deltaText: `${arrow} ${Math.abs(delta)} ggü. Vorwoche`,
-    deltaColor,
+    deltaDirection,
     hasDelta: delta !== 0,
   };
 }

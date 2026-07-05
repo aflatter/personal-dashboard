@@ -1,7 +1,7 @@
-import { Popover } from '@base-ui/react/popover';
-import { Switch } from '@base-ui/react/switch';
-import { NumberField } from '@base-ui/react/number-field';
-import { useDashboardStore } from '../store/DashboardContext';
+import { Popover } from "@base-ui/react/popover";
+import { Switch } from "@base-ui/react/switch";
+import { NumberField } from "@base-ui/react/number-field";
+import { useDashboardStore } from "../store/DashboardContext";
 
 /** Header settings: configurable thresholds + clock seconds (SPEC "tweaks"). */
 export function SettingsPopover() {
@@ -27,7 +27,7 @@ export function SettingsPopover() {
                 <Switch.Root
                   checked={settings.clockSeconds}
                   onCheckedChange={(checked) => updateSettings({ clockSeconds: checked })}
-                  className="relative w-[34px] h-[20px] rounded-full bg-[#E2DFD9] cursor-pointer transition-colors duration-150 data-[checked]:bg-persoenlich flex-none"
+                  className="relative w-[34px] h-[20px] rounded-full bg-[#E2DFD9] cursor-pointer transition-colors duration-150 data-[checked]:bg-personal flex-none"
                 >
                   <Switch.Thumb className="block w-[16px] h-[16px] rounded-full bg-white absolute top-[2px] left-[2px] transition-transform duration-150 data-[checked]:translate-x-[14px]" />
                 </Switch.Root>

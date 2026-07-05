@@ -1,34 +1,25 @@
-import type { Settings } from './types';
-import { counter } from './counter';
-import { tageDative, tageNominative, type TaskLineView } from './task-line';
+import type { Settings } from "./types";
+import { counter } from "./counter";
+import type { TaskLine } from "./task-line";
 
-type Thresholds = Pick<Settings, 'dueSoonThreshold' | 'overdueThreshold'>;
+type Thresholds = Pick<Settings, "dueSoonThreshold" | "overdueThreshold">;
 
 /**
  * Company receipts upload to the tax office (Firmenbelege · Finanzamt): a plain
- * day-counter. Calm ("aktuell") shows time since the last upload; otherwise it
+ * day-counter. Calm (`current`) reports time since the last upload; otherwise it
  * reports how long the upload has been due / overdue.
  */
-export function taxCalc(now: number, taxDoneAt: number, thresholds: Thresholds): TaskLineView {
+export function taxCalc(now: number, taxDoneAt: number, thresholds: Thresholds): TaskLine {
   const c = counter(taxDoneAt, thresholds, now);
 
-  if (c.status === 'aktuell') {
-    return {
-      done: true,
-      linePre: 'Letzter Upload vor ',
-      lineEm: tageDative(c.days),
-      lineEmColor: '#3E8E6B',
-      linePost: '',
-      last: c.last,
-    };
+  if (c.status === "current") {
+    return { kind: "calm-since", days: c.days, done: true, doneAt: taxDoneAt };
   }
 
   return {
+    kind: c.status === "overdue" ? "overdue" : "due",
+    days: c.days,
     done: false,
-    linePre: '',
-    lineEm: tageNominative(c.days),
-    lineEmColor: c.emphasisColor,
-    linePost: c.status === 'überfällig' ? ' überfällig' : ' fällig',
-    last: c.last,
+    doneAt: taxDoneAt,
   };
 }

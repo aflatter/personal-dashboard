@@ -1,12 +1,13 @@
-import { hoursView, MONTHS } from '../domain';
-import { useDashboardStore } from '../store/DashboardContext';
-import { Card, ClientBlock } from './ui';
+import { hoursView } from "../domain";
+import { formatHours, formatMonth } from "../presentation";
+import { useDashboardStore } from "../store/DashboardContext";
+import { Card, ClientBlock } from "./ui";
 
 /** Arbeitszeit — this month's billed hours, grouped by client → project. */
 export function HoursCard() {
   const { state, now } = useDashboardStore();
   const view = hoursView(state.clients);
-  const monthLabel = MONTHS[new Date(now).getMonth()];
+  const monthLabel = formatMonth(now);
 
   return (
     <Card>
@@ -17,7 +18,7 @@ export function HoursCard() {
             {monthLabel} · {view.clientCount} Mandate
           </div>
         </div>
-        <span className="tnum text-[18px] font-semibold">{view.monthTotal} h</span>
+        <span className="tnum text-[18px] font-semibold">{formatHours(view.monthTotal)} h</span>
       </div>
       <div className="flex flex-col gap-[14px] mt-4">
         {view.clients.map((client, i) => (

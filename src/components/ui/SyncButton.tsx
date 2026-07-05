@@ -1,4 +1,4 @@
-import { Button } from '@base-ui/react/button';
+import { Button } from "@base-ui/react/button";
 
 /** The inbox "↺ sync" control; shows "sync…" while a refresh is in flight. */
 export function SyncButton({ syncing, onClick }: { syncing: boolean; onClick: () => void }) {
@@ -6,9 +6,9 @@ export function SyncButton({ syncing, onClick }: { syncing: boolean; onClick: ()
     <Button
       onClick={onClick}
       disabled={syncing}
-      className="tnum text-[11px] text-muted bg-transparent border-0 px-0 py-[2px] cursor-pointer whitespace-nowrap transition-colors duration-150 hover:text-persoenlich"
+      className="tnum text-[11px] text-muted bg-transparent border-0 px-0 py-[2px] cursor-pointer whitespace-nowrap transition-colors duration-150 hover:text-personal"
     >
-      ↺ {syncing ? 'sync…' : 'sync'}
+      ↺ {syncing ? "sync…" : "sync"}
     </Button>
   );
 }
