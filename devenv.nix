@@ -23,4 +23,8 @@
     collector.exec = "node packages/collector/src/main.ts";
     dashboard.exec = "pnpm --filter @dash/dashboard dev";
   };
+
+  packages = [
+    pkgs.secretspec
+  ];
 }

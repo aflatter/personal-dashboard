@@ -19,8 +19,8 @@ interface Session {
 async function openSession(token: string): Promise<Session> {
   const res = await fetch(SESSION_URL, { headers: { Authorization: `Bearer ${token}` } });
   if (!res.ok) throw new Error(`JMAP session HTTP ${res.status}`);
-  // VERIFY against a live session: `username` is the login email; the mail
-  // account id is under primaryAccounts[mail capability].
+  // `username` is the login email; the mail account id is under
+  // primaryAccounts[mail capability] (verified against a live Fastmail session).
   const body = (await res.json()) as {
     apiUrl: string;
     username: string;
