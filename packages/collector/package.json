@@ -20,6 +20,7 @@
   },
   "dependencies": {
     "@trpc/server": "^11.0.0",
+    "secretspec": "^0.13.0",
     "zod": "^3.24.0"
   },
   "devDependencies": {

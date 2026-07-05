@@ -16,7 +16,9 @@
   '';
 
   # `devenv up` runs the collector service and the dashboard dev server together.
-  # Stage 3 wraps the collector in `secretspec run -- …` to inject 1Password secrets.
+  # The collector loads its own secrets in-process via the secretspec SDK (from
+  # 1Password, per secretspec.toml) — the shell and tests never touch the vault.
+  # Set MONEYMONEY=1 to enable the (opt-in) MoneyMoney source.
   processes = {
     collector.exec = "node packages/collector/src/main.ts";
     dashboard.exec = "pnpm --filter @dash/dashboard dev";

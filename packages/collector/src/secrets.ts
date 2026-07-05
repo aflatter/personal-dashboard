@@ -1,7 +1,14 @@
-// Secrets are injected as env vars by SecretSpec (`secretspec run -- …`), resolved
-// from 1Password. All optional: a missing secret means the matching source is
-// simply skipped (the collector keeps serving its last-known/seeded state).
+import { createRequire } from "node:module";
+import { fileURLToPath } from "node:url";
 
+// The secretspec Node SDK is a CommonJS native (napi) addon — load it via
+// createRequire so the ESM named-export interop can't bite us.
+const require = createRequire(import.meta.url);
+
+// Secrets are declared in the repo-root secretspec.toml and resolved at boot from
+// the configured provider (1Password). All optional: a missing secret (or the
+// provider being unavailable) just means the matching source is skipped — the
+// collector keeps serving its last-known / seeded state.
 export interface Secrets {
   fastmailTokenPersonal?: string;
   fastmailTokenWork?: string;
@@ -9,11 +16,36 @@ export interface Secrets {
   togglWorkspaceId?: string;
 }
 
+const TOML_PATH =
+  process.env.SECRETSPEC_PATH ??
+  fileURLToPath(new URL("../../../secretspec.toml", import.meta.url));
+
 export function loadSecrets(): Secrets {
-  return {
-    fastmailTokenPersonal: process.env.FASTMAIL_TOKEN_PERSONAL,
-    fastmailTokenWork: process.env.FASTMAIL_TOKEN_WORK,
-    togglApiToken: process.env.TOGGL_API_TOKEN,
-    togglWorkspaceId: process.env.TOGGL_WORKSPACE_ID,
-  };
+  try {
+    const { SecretSpec } = require("secretspec") as typeof import("secretspec");
+
+    let builder = SecretSpec.builder()
+      .withPath(TOML_PATH)
+      .withProfile(process.env.SECRETSPEC_PROFILE ?? "default")
+      .withReason("personal-dashboard collector");
+    // Provider comes from `secretspec config` (global) unless overridden here.
+    const provider = process.env.SECRETSPEC_PROVIDER;
+    if (provider) builder = builder.withProvider(provider);
+
+    const resolved = builder.load();
+    const fields = resolved.fields();
+    resolved.dispose();
+
+    const val = (name: string): string | undefined => fields[name] ?? undefined;
+    return {
+      fastmailTokenPersonal: val("FASTMAIL_TOKEN_PERSONAL"),
+      fastmailTokenWork: val("FASTMAIL_TOKEN_WORK"),
+      togglApiToken: val("TOGGL_API_TOKEN"),
+      togglWorkspaceId: val("TOGGL_WORKSPACE_ID"),
+    };
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.warn(`secretspec: no secrets loaded (${msg}); sources needing them are skipped`);
+    return {};
+  }
 }

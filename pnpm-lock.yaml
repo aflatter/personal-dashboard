@@ -20,6 +20,9 @@ importers:
       '@trpc/server':
         specifier: ^11.0.0
         version: 11.18.0(typescript@6.0.3)
+      secretspec:
+        specifier: ^0.13.0
+        version: 0.13.0
       zod:
         specifier: ^3.24.0
         version: 3.25.76
@@ -1118,6 +1121,31 @@ packages:
   scheduler@0.27.0:
     resolution: {integrity: sha512-eNv+WrVbKu1f3vbYJT/xtiF5syA5HPIMtf9IgY/nKg0sWqzAUEvqY/xm7OcZc/qafLx/iO9FgOmeSAp4v5ti/Q==}
 
+  secretspec-darwin-arm64@0.13.0:
+    resolution: {integrity: sha512-uoXboZyxkWA9m1EevGBgDx11mnMfvBGd86qYkvXYySSlUt0+OFee2B0Qx3EFdHMelBHxfQZZTytnITKo2C+eSQ==}
+    cpu: [arm64]
+    os: [darwin]
+
+  secretspec-linux-arm64-gnu@0.13.0:
+    resolution: {integrity: sha512-WPZRSaIg1CQzD6dot17oAu5RlSZWwOPe0Yx5sHmW+IXxQYnGvhYcsH3ib8dkdGgkg45vutQEBQJSyM2WUWWq5g==}
+    cpu: [arm64]
+    os: [linux]
+    libc: [glibc]
+
+  secretspec-linux-x64-gnu@0.13.0:
+    resolution: {integrity: sha512-Rb9tsnrgDI9yALPP5A91NN5+9bjoxmcBVxuplH7XiP2DBRmH8SSK1G7e6CxhWyok1zHJW4s2qGFyz+kB9rRHXw==}
+    cpu: [x64]
+    os: [linux]
+    libc: [glibc]
+
+  secretspec-win32-x64-msvc@0.13.0:
+    resolution: {integrity: sha512-Zh2JOKG2BbMF8oUbqzD3VDHYWW6hYTEkXM9hWJrijbg3YU2HgodEcqfq1LJ+Rrdz90CmZRqpn9Qu7GJZDYqz7A==}
+    cpu: [x64]
+    os: [win32]
+
+  secretspec@0.13.0:
+    resolution: {integrity: sha512-iXtkMhpCGUkG/yHleWdVTHWdv0qPL8yPz83Ia2KaycOkQeD3fZDlwWJwt/Q5bTqOh9OY7O3v5CsMtJsI7zvmoA==}
+
   siginfo@2.0.0:
     resolution: {integrity: sha512-ybx0WO1/8bSBLEWXZvEd7gMW3Sn3JFlW3TvX1nREbDLRNQNaeNN8WK0meBwPdAaOI7TtRRRJn/Es1zhrrCHu7g==}
 
@@ -2040,6 +2068,25 @@ snapshots:
       '@rolldown/binding-win32-x64-msvc': 1.1.3
 
   scheduler@0.27.0: {}
+
+  secretspec-darwin-arm64@0.13.0:
+    optional: true
+
+  secretspec-linux-arm64-gnu@0.13.0:
+    optional: true
+
+  secretspec-linux-x64-gnu@0.13.0:
+    optional: true
+
+  secretspec-win32-x64-msvc@0.13.0:
+    optional: true
+
+  secretspec@0.13.0:
+    optionalDependencies:
+      secretspec-darwin-arm64: 0.13.0
+      secretspec-linux-arm64-gnu: 0.13.0
+      secretspec-linux-x64-gnu: 0.13.0
+      secretspec-win32-x64-msvc: 0.13.0
 
   siginfo@2.0.0: {}
 
