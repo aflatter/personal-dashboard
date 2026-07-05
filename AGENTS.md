@@ -124,6 +124,13 @@ Rules:
 - **Data comes from the collector** (`node:sqlite`; seeded on first run via
   `packages/collector/src/seed.ts`). Real source adapters (JMAP/Fastmail,
   MoneyMoney via AppleScript, Toggl) live in `packages/collector/src/sources`
-  behind a common port — add them there, never in the SPA. Run both services
-  with `devenv up` (collector on `:4319`, dashboard on `:5173`, which proxies
-  `/api` → the collector).
+  behind a common `Source` port; the `scheduler` polls them and the `sampler`
+  commits day-bucketed history. Add sources there, never in the SPA. Run both
+  services with `devenv up` (collector on `:4319`, dashboard on `:5173`, which
+  proxies `/api` → the collector).
+- **Sources degrade gracefully.** A source without its secret (or MoneyMoney
+  without `MONEYMONEY=1`) is skipped, and any poll failure marks only that
+  source `ok:false` while the rest keep serving. Enable real data with
+  `secretspec run -- node packages/collector/src/main.ts` (Fastmail/Toggl tokens
+  declared in `secretspec.toml`, resolved from 1Password) plus `MONEYMONEY=1`
+  (needs MoneyMoney unlocked + the collector granted macOS Automation permission).
