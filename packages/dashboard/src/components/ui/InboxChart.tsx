@@ -1,4 +1,4 @@
-import type { SeriesGeom } from '../../domain';
+import type { SeriesGeom } from "../../domain";
 
 /**
  * Two-series area chart: slate total line + blue unread line drawn on top, with
@@ -36,11 +36,19 @@ export function InboxChart({ unread, total }: { unread: SeriesGeom; total: Serie
       <circle cx={unread.ex} cy={unread.ey} r="4.4" fill="#fff" />
       <circle cx={unread.ex} cy={unread.ey} r="2.8" fill="#4F6BD8" />
 
-      <g className="tnum" style={{ fontSize: '8.5px', fill: '#B4B1A8' }}>
-        <text x="2" y="70" textAnchor="start">Mo</text>
-        <text x="110" y="70" textAnchor="middle">Mi</text>
-        <text x="219" y="70" textAnchor="middle">Fr</text>
-        <text x="328" y="70" textAnchor="end" fill="#1B1B1A" fontWeight="600">So</text>
+      <g className="tnum" style={{ fontSize: "8.5px", fill: "#B4B1A8" }}>
+        <text x="2" y="70" textAnchor="start">
+          Mo
+        </text>
+        <text x="110" y="70" textAnchor="middle">
+          Mi
+        </text>
+        <text x="219" y="70" textAnchor="middle">
+          Fr
+        </text>
+        <text x="328" y="70" textAnchor="end" fill="#1B1B1A" fontWeight="600">
+          So
+        </text>
       </g>
     </svg>
   );

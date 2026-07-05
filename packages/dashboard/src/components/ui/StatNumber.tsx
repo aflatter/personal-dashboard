@@ -1,4 +1,4 @@
-import { cx } from './cx';
+import { cx } from "./cx";
 
 /** A big mono figure with an inline label, e.g. "12 ungelesen". */
 export function StatNumber({
@@ -6,8 +6,8 @@ export function StatNumber({
   label,
   valueColor,
   labelColor,
-  valueClassName = 'text-[34px]',
-  gap = 'gap-[7px]',
+  valueClassName = "text-[34px]",
+  gap = "gap-[7px]",
 }: {
   value: number | string;
   label: string;
@@ -17,9 +17,9 @@ export function StatNumber({
   gap?: string;
 }) {
   return (
-    <div className={cx('flex items-baseline', gap)}>
+    <div className={cx("flex items-baseline", gap)}>
       <span
-        className={cx('tnum font-semibold tracking-[-0.02em]', valueClassName)}
+        className={cx("tnum font-semibold tracking-[-0.02em]", valueClassName)}
         style={{ color: valueColor, lineHeight: 0.8 }}
       >
         {value}

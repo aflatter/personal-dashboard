@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import type { ReactNode } from "react";
 
 /** Card title (15/600) + optional subtitle (13px secondary) with a right slot. */
 export function CardHeader({

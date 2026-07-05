@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import type { ReactNode } from "react";
 
 /** A hairline-topped footer row pulled to the card's bottom edge. */
 export function CardFooterHairline({ children }: { children: ReactNode }) {

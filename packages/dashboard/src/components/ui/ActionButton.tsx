@@ -1,4 +1,4 @@
-import { Button } from '@base-ui/react/button';
+import { Button } from "@base-ui/react/button";
 
 /**
  * A quiet mono action like "✓ erledigt" / "✓ geprüft": muted at rest, tinted

@@ -1,6 +1,6 @@
-import { bankView } from '../domain';
-import { useDashboardStore } from '../store/DashboardContext';
-import { ActionButton, Card, CardHeader, Pill, StatNumber } from './ui';
+import { bankView } from "../domain";
+import { useDashboardStore } from "../store/DashboardContext";
+import { ActionButton, Card, CardHeader, Pill, StatNumber } from "./ui";
 
 /** Spaßkonto (MoneyMoney) — the unreviewed-transaction backlog is the hero. */
 export function BankCard() {

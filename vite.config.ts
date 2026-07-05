@@ -1,14 +1,9 @@
 import { defineConfig } from "vite-plus";
-import react from "@vitejs/plugin-react";
-import tailwindcss from "@tailwindcss/vite";
 
+// Root workspace config: shared tooling (staged checks, lint, format).
+// Per-package Vite/Vitest config lives in each package's own vite.config.ts.
 export default defineConfig({
   staged: {
     "*": "vp check --fix",
-  },
-  plugins: [react(), tailwindcss()],
-  test: {
-    // Domain logic is pure — no DOM needed.
-    include: ["src/**/*.test.ts"],
   },
 });

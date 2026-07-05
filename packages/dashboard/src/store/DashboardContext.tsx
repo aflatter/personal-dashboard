@@ -1,5 +1,5 @@
-import { createContext, useContext, type ReactNode } from 'react';
-import { useDashboard, type DashboardStore } from './useDashboard';
+import { createContext, useContext, type ReactNode } from "react";
+import { useDashboard, type DashboardStore } from "./useDashboard";
 
 const DashboardContext = createContext<DashboardStore | null>(null);
 
@@ -11,6 +11,6 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
 /** Read the dashboard store from any descendant of <DashboardProvider>. */
 export function useDashboardStore(): DashboardStore {
   const store = useContext(DashboardContext);
-  if (!store) throw new Error('useDashboardStore must be used within <DashboardProvider>');
+  if (!store) throw new Error("useDashboardStore must be used within <DashboardProvider>");
   return store;
 }

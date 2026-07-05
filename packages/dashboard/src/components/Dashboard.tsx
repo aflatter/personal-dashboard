@@ -1,11 +1,11 @@
-import type { ReactNode } from 'react';
-import { ColumnHeader } from './ui';
-import { DashboardHeader } from './DashboardHeader';
-import { InboxCard } from './InboxCard';
-import { BankCard } from './BankCard';
-import { RentCard } from './RentCard';
-import { TaxCard } from './TaxCard';
-import { HoursCard } from './HoursCard';
+import type { ReactNode } from "react";
+import { ColumnHeader } from "./ui";
+import { DashboardHeader } from "./DashboardHeader";
+import { InboxCard } from "./InboxCard";
+import { BankCard } from "./BankCard";
+import { RentCard } from "./RentCard";
+import { TaxCard } from "./TaxCard";
+import { HoursCard } from "./HoursCard";
 
 /** The dashboard shell: header + three life-area columns. */
 export function Dashboard() {
@@ -32,7 +32,15 @@ export function Dashboard() {
   );
 }
 
-function Column({ label, accent, children }: { label: string; accent: string; children: ReactNode }) {
+function Column({
+  label,
+  accent,
+  children,
+}: {
+  label: string;
+  accent: string;
+  children: ReactNode;
+}) {
   return (
     <div>
       <ColumnHeader label={label} accent={accent} />

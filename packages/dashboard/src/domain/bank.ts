@@ -1,5 +1,5 @@
-import type { Bank } from './types';
-import { DAY } from './constants';
+import type { Bank } from "./types";
+import { DAY } from "./constants";
 
 export interface BankView {
   /** Unreviewed transactions — the actionable hero number. */

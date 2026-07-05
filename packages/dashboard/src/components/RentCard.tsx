@@ -1,6 +1,6 @@
-import { rentCalc } from '../domain';
-import { useDashboardStore } from '../store/DashboardContext';
-import { TaskCard } from './ui';
+import { rentCalc } from "../domain";
+import { useDashboardStore } from "../store/DashboardContext";
+import { TaskCard } from "./ui";
 
 /** Mietbuchhaltung — rent bookkeeping, due by the 4th workday each month. */
 export function RentCard() {

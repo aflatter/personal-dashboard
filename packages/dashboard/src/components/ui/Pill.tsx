@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import type { ReactNode } from "react";
 
 /** Neutral rounded pill (mono), e.g. "geprüft vor 5 T". */
 export function Pill({ children }: { children: ReactNode }) {

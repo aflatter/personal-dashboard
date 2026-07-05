@@ -1,6 +1,6 @@
-import { taxCalc } from '../domain';
-import { useDashboardStore } from '../store/DashboardContext';
-import { TaskCard } from './ui';
+import { taxCalc } from "../domain";
+import { useDashboardStore } from "../store/DashboardContext";
+import { TaskCard } from "./ui";
 
 /** Firmenbelege · Finanzamt — company receipts upload, a plain day-counter. */
 export function TaxCard() {

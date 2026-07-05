@@ -1,8 +1,8 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
-import type { Inbox, Settings } from '../domain';
-import { createSeed, type DashboardState } from './seed';
+import { useCallback, useEffect, useRef, useState } from "react";
+import type { Inbox, Settings } from "../domain";
+import { createSeed, type DashboardState } from "./seed";
 
-const STORAGE_KEY = 'dashboard-areas-v2';
+const STORAGE_KEY = "dashboard-areas-v2";
 
 function loadState(now: number): DashboardState {
   const seed = createSeed(now);
@@ -77,9 +77,12 @@ export function useDashboard(): DashboardStore {
     saveState(state);
   }, [state]);
 
-  useEffect(() => () => {
-    if (syncTimer.current) clearTimeout(syncTimer.current);
-  }, []);
+  useEffect(
+    () => () => {
+      if (syncTimer.current) clearTimeout(syncTimer.current);
+    },
+    [],
+  );
 
   const sync = useCallback(() => {
     if (syncingRef.current) return;

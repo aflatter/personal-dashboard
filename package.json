@@ -4,29 +4,18 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "vp dev",
-    "build": "vp build",
-    "preview": "vp preview",
-    "test": "vp test",
+    "dev": "vp dev packages/dashboard",
+    "build": "vp build packages/dashboard",
+    "preview": "vp preview packages/dashboard",
+    "test": "vp run -r test",
     "lint": "vp lint",
     "format": "vp format",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "vp run -r typecheck",
     "prepare": "vp config --no-agent"
   },
-  "dependencies": {
-    "@base-ui/react": "^1.6.0",
-    "react": "^19.2.7",
-    "react-dom": "^19.2.7"
-  },
   "devDependencies": {
-    "@tailwindcss/vite": "^4.3.2",
-    "@types/react": "^19.2.17",
-    "@types/react-dom": "^19.2.3",
-    "@vitejs/plugin-react": "^6.0.3",
-    "tailwindcss": "^4.3.2",
     "typescript": "^6.0.3",
-    "vite-plus": "^0.2.1",
-    "vitest": "^4.1.9"
+    "vite-plus": "^0.2.1"
   },
   "packageManager": "pnpm@11.5.3"
 }
