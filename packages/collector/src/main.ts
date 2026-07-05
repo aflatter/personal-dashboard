@@ -2,7 +2,10 @@ import { createServer } from "node:http";
 import { fileURLToPath } from "node:url";
 import { createHTTPHandler } from "@trpc/server/adapters/standalone";
 import { appRouter } from "./router.ts";
+import { loadSecrets } from "./secrets.ts";
 import { seed } from "./seed.ts";
+import { startScheduler } from "./scheduler.ts";
+import { jobs } from "./sources/index.ts";
 import { Db } from "./store/db.ts";
 
 const HOST = process.env.COLLECTOR_HOST ?? "127.0.0.1";
@@ -16,9 +19,11 @@ if (db.isEmpty()) {
   console.log("seeded empty database");
 }
 
+// Poll real sources on their cadences (skips any without a secret / opt-in).
+startScheduler(db, loadSecrets(), jobs);
+
 // Own http server so we can bind loopback explicitly; tRPC handles the routing.
 const handler = createHTTPHandler({ router: appRouter, createContext: () => ({ db }) });
 createServer(handler).listen(PORT, HOST, () => {
   console.log(`collector listening on http://${HOST}:${PORT}`);
 });
-// Stage 3: scheduler.start(db, secrets) drives real source polling here.
