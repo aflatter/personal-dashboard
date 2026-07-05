@@ -5,7 +5,13 @@ const DashboardContext = createContext<DashboardStore | null>(null);
 
 export function DashboardProvider({ children }: { children: ReactNode }) {
   const store = useDashboard();
-  return <DashboardContext.Provider value={store}>{children}</DashboardContext.Provider>;
+  if (!store.state) {
+    return (
+      <div className="min-h-full grid place-items-center text-secondary text-[13px]">Lädt …</div>
+    );
+  }
+  const ready: DashboardStore = { ...store, state: store.state };
+  return <DashboardContext.Provider value={ready}>{children}</DashboardContext.Provider>;
 }
 
 /** Read the dashboard store from any descendant of <DashboardProvider>. */

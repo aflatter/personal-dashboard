@@ -14,4 +14,11 @@
   enterShell = ''
     echo "personal-dashboard · node $(node --version) · pnpm $(pnpm --version)"
   '';
+
+  # `devenv up` runs the collector service and the dashboard dev server together.
+  # Stage 3 wraps the collector in `secretspec run -- …` to inject 1Password secrets.
+  processes = {
+    collector.exec = "node packages/collector/src/main.ts";
+    dashboard.exec = "pnpm --filter @dash/dashboard dev";
+  };
 }

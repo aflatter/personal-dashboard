@@ -1,10 +1,18 @@
 // Core domain model for the personal dashboard.
 // Pure types — no React, no rendering concerns.
+//
+// Entity types shared with the collector service live in @dash/shared and are
+// re-exported here so the domain has one import surface. Types below are the
+// SPA's internal shapes that differ from the wire contract.
 
-export type InboxAccount = "personal" | "work";
-export type MailProtocol = "IMAP" | "Exchange";
+import type { InboxAccount, MailProtocol } from "@dash/shared";
 
-/** A mail inbox we track for Inbox-Zero: both total and unread matter. */
+export type { InboxAccount, MailProtocol, Project, Client, Settings } from "@dash/shared";
+
+/**
+ * A mail inbox for the card. Histories are plain number series here (the wire
+ * contract carries dated DayPoints; the store flattens them for the chart).
+ */
 export interface Inbox {
   account: InboxAccount;
   /** Shown as the card subtitle, e.g. "alex@tevim.com". */
@@ -19,17 +27,6 @@ export interface Inbox {
   totalHistory: number[];
 }
 
-export interface Project {
-  name: string;
-  /** Hours billed this month. */
-  hours: number;
-}
-
-export interface Client {
-  name: string;
-  projects: Project[];
-}
-
 /** A reviewable bank account (Spaßkonto / MoneyMoney). */
 export interface Bank {
   /** Unreviewed transactions — the actionable backlog (hero number). */
@@ -39,13 +36,3 @@ export interface Bank {
 }
 
 export type CounterStatus = "current" | "due-soon" | "overdue";
-
-/** User-configurable thresholds and display options (SPEC "tweaks"). */
-export interface Settings {
-  /** Days until a counter is `overdue`. */
-  overdueThreshold: number;
-  /** Days until a counter is `due-soon`. */
-  dueSoonThreshold: number;
-  /** Show seconds in the header clock. */
-  clockSeconds: boolean;
-}

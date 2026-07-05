@@ -1,49 +1,32 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { Inbox, Settings } from "../domain";
-import { createSeed, type DashboardState } from "./seed";
+import type { Settings } from "../domain";
+import {
+  fetchState,
+  markRentDone,
+  markTaxDone,
+  requestSync,
+  saveSettings,
+  type DashboardState,
+} from "../api/client";
 
-const STORAGE_KEY = "dashboard-areas-v2";
+const CACHE_KEY = "dashboard-cache-v1";
+const POLL_MS = 30_000;
 
-function loadState(now: number): DashboardState {
-  const seed = createSeed(now);
+function loadCache(): DashboardState | null {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return seed;
-    const saved = JSON.parse(raw) as Partial<DashboardState>;
-    return {
-      ...seed,
-      ...saved,
-      emails: saved.emails ?? seed.emails,
-      bank: saved.bank ?? seed.bank,
-      clients: saved.clients ?? seed.clients,
-      settings: { ...seed.settings, ...saved.settings },
-    };
+    const raw = localStorage.getItem(CACHE_KEY);
+    return raw ? (JSON.parse(raw) as DashboardState) : null;
   } catch {
-    return seed;
+    return null;
   }
 }
 
-function saveState(state: DashboardState): void {
+function saveCache(state: DashboardState): void {
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    localStorage.setItem(CACHE_KEY, JSON.stringify(state));
   } catch {
-    // Ignore quota / unavailable storage — persistence is best-effort.
+    // Best-effort cache — ignore quota / unavailable storage.
   }
-}
-
-const randomInt = (min: number, max: number) => Math.floor(Math.random() * (max - min + 1)) + min;
-
-/** Fake re-fetch: nudge totals/unread and append today's point to both series. */
-function nudgeInbox(inbox: Inbox): Inbox {
-  const total = Math.max(0, inbox.total + randomInt(-3, 5));
-  const unread = Math.max(0, Math.min(total, inbox.unread + randomInt(-3, 4)));
-  return {
-    ...inbox,
-    total,
-    unread,
-    history: [...inbox.history.slice(-10), unread],
-    totalHistory: [...inbox.totalHistory.slice(-10), total],
-  };
 }
 
 export interface DashboardStore {
@@ -51,20 +34,27 @@ export interface DashboardStore {
   /** Wall-clock, refreshed every second (drives the clock + day counters). */
   now: number;
   syncing: boolean;
+  /** False when the last collector call failed — the UI is showing cached data. */
+  online: boolean;
   sync: () => void;
   markRent: () => void;
   markTax: () => void;
-  markBank: () => void;
   updateSettings: (partial: Partial<Settings>) => void;
 }
 
-/** Single source of truth for the dashboard: seeded state + actions. */
-export function useDashboard(): DashboardStore {
+/** Thin client over the collector: fetch + poll state, POST mutations, cache locally. */
+export function useDashboard() {
   const [now, setNow] = useState(() => Date.now());
-  const [state, setState] = useState<DashboardState>(() => loadState(Date.now()));
+  const [state, setState] = useState<DashboardState | null>(() => loadCache());
   const [syncing, setSyncing] = useState(false);
+  const [online, setOnline] = useState(true);
   const syncingRef = useRef(false);
-  const syncTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const apply = useCallback((next: DashboardState) => {
+    setState(next);
+    saveCache(next);
+    setOnline(true);
+  }, []);
 
   // Live clock — also keeps day counters current.
   useEffect(() => {
@@ -72,45 +62,47 @@ export function useDashboard(): DashboardStore {
     return () => clearInterval(id);
   }, []);
 
-  // Persist on every state change.
+  // Initial load + background poll.
   useEffect(() => {
-    saveState(state);
-  }, [state]);
+    let alive = true;
+    const load = () =>
+      fetchState()
+        .then((s) => alive && apply(s))
+        .catch(() => alive && setOnline(false));
+    void load();
+    const id = setInterval(() => void load(), POLL_MS);
+    return () => {
+      alive = false;
+      clearInterval(id);
+    };
+  }, [apply]);
 
-  useEffect(
-    () => () => {
-      if (syncTimer.current) clearTimeout(syncTimer.current);
+  const mutate = useCallback(
+    (p: Promise<DashboardState>) => {
+      p.then(apply).catch(() => setOnline(false));
     },
-    [],
+    [apply],
   );
 
   const sync = useCallback(() => {
     if (syncingRef.current) return;
     syncingRef.current = true;
     setSyncing(true);
-    syncTimer.current = setTimeout(() => {
-      setState((s) => ({
-        ...s,
-        emails: { personal: nudgeInbox(s.emails.personal), work: nudgeInbox(s.emails.work) },
-        bank: { ...s.bank, unchecked: Math.max(0, s.bank.unchecked + randomInt(-1, 3)) },
-        lastSyncAt: Date.now(),
-      }));
-      syncingRef.current = false;
-      setSyncing(false);
-    }, 650);
-  }, []);
+    requestSync()
+      .then(apply)
+      .catch(() => setOnline(false))
+      .finally(() => {
+        syncingRef.current = false;
+        setSyncing(false);
+      });
+  }, [apply]);
 
-  const markRent = useCallback(() => setState((s) => ({ ...s, rentDoneAt: Date.now() })), []);
-  const markTax = useCallback(() => setState((s) => ({ ...s, taxDoneAt: Date.now() })), []);
-  const markBank = useCallback(
-    () => setState((s) => ({ ...s, bank: { unchecked: 0, lastCheckedAt: Date.now() } })),
-    [],
-  );
+  const markRent = useCallback(() => mutate(markRentDone()), [mutate]);
+  const markTax = useCallback(() => mutate(markTaxDone()), [mutate]);
   const updateSettings = useCallback(
-    (partial: Partial<Settings>) =>
-      setState((s) => ({ ...s, settings: { ...s.settings, ...partial } })),
-    [],
+    (partial: Partial<Settings>) => mutate(saveSettings(partial)),
+    [mutate],
   );
 
-  return { state, now, syncing, sync, markRent, markTax, markBank, updateSettings };
+  return { state, now, syncing, online, sync, markRent, markTax, updateSettings };
 }

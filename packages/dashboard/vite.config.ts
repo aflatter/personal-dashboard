@@ -2,8 +2,14 @@ import { defineConfig } from "vite-plus";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 
+const COLLECTOR = process.env.COLLECTOR_URL ?? "http://127.0.0.1:4319";
+
 export default defineConfig({
   plugins: [react(), tailwindcss()],
+  server: {
+    // The collector owns state; the SPA reads it over loopback.
+    proxy: { "/api": COLLECTOR },
+  },
   test: {
     // Domain + presentation logic is pure — no DOM needed.
     include: ["src/**/*.test.ts"],

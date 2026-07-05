@@ -1,0 +1,17 @@
+{
+  "name": "@dash/collector",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node src/main.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@dash/shared": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^24.7.0",
+    "typescript": "^6.0.3"
+  }
+}
