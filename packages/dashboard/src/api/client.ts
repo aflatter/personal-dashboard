@@ -1,5 +1,6 @@
-import type { InboxState, SourceId, SourceStatus, StateResponse } from "@dash/shared";
+import type { InboxState, SourceId, SourceStatus, StateResponse } from "@dash/collector/contract";
 import type { Bank, Inbox, Settings } from "../domain";
+import { trpc } from "./trpc";
 
 /** The SPA's in-memory view of the collector state, mapped to domain shapes. */
 export interface DashboardState {
@@ -37,30 +38,22 @@ function mapState(wire: StateResponse, now: number): DashboardState {
   };
 }
 
-const BASE = "/api";
-
-async function readState(res: Response): Promise<DashboardState> {
-  if (!res.ok) throw new Error(`collector ${res.status}`);
-  const wire = (await res.json()) as StateResponse;
-  return mapState(wire, Date.now());
-}
-
-async function post(path: string, body: unknown = {}): Promise<DashboardState> {
-  return readState(
-    await fetch(`${BASE}${path}`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-    }),
-  );
-}
-
 export async function fetchState(): Promise<DashboardState> {
-  return readState(await fetch(`${BASE}/state`));
+  return mapState(await trpc.state.query(), Date.now());
 }
 
-export const markRentDone = (): Promise<DashboardState> => post("/rent/done");
-export const markTaxDone = (): Promise<DashboardState> => post("/tax/done");
-export const saveSettings = (patch: Partial<Settings>): Promise<DashboardState> =>
-  post("/settings", patch);
-export const requestSync = (): Promise<DashboardState> => post("/sync");
+export async function markRentDone(): Promise<DashboardState> {
+  return mapState(await trpc.rentDone.mutate(), Date.now());
+}
+
+export async function markTaxDone(): Promise<DashboardState> {
+  return mapState(await trpc.taxDone.mutate(), Date.now());
+}
+
+export async function saveSettings(patch: Partial<Settings>): Promise<DashboardState> {
+  return mapState(await trpc.settings.mutate(patch), Date.now());
+}
+
+export async function requestSync(): Promise<DashboardState> {
+  return mapState(await trpc.sync.mutate(), Date.now());
+}

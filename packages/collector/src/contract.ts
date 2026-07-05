@@ -1,5 +1,6 @@
-// The wire contract between the collector service and the dashboard SPA.
-// Pure types, no dependencies — imported by both packages.
+// Data shapes the collector produces. The tRPC router's procedures return these,
+// so the dashboard infers them from AppRouter — this file is the origin, not a
+// separately-maintained "shared" contract. Pure types, no tRPC, no deps.
 
 export type InboxAccount = "personal" | "work";
 export type MailProtocol = "IMAP" | "Exchange" | "JMAP";
@@ -57,7 +58,7 @@ export interface SourceStatus {
   error?: string;
 }
 
-/** The full dashboard state served by GET /api/state. */
+/** The full dashboard state (the `state` query's result). */
 export interface StateResponse {
   inboxes: { personal: InboxState; work: InboxState };
   bank: BankState;

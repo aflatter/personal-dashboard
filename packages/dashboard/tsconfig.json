@@ -6,6 +6,9 @@
     "moduleResolution": "bundler",
     "jsx": "react-jsx",
     "useDefineForClassFields": true,
+    // The tRPC AppRouter type flows in from the collector, whose .ts files use
+    // .ts import specifiers (needed to run raw on Node). This lets tsc read them.
+    "allowImportingTsExtensions": true,
     "strict": true,
     "noUnusedLocals": true,
     "noUnusedParameters": true,

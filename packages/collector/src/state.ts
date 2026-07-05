@@ -8,7 +8,7 @@ import type {
   SourceId,
   SourceStatus,
   StateResponse,
-} from "@dash/shared";
+} from "./contract.ts";
 import type { Db } from "./store/db.ts";
 import type { InboxSnapshot } from "./seed.ts";
 

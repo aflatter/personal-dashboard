@@ -5,9 +5,15 @@
 // re-exported here so the domain has one import surface. Types below are the
 // SPA's internal shapes that differ from the wire contract.
 
-import type { InboxAccount, MailProtocol } from "@dash/shared";
+import type { InboxAccount, MailProtocol } from "@dash/collector/contract";
 
-export type { InboxAccount, MailProtocol, Project, Client, Settings } from "@dash/shared";
+export type {
+  InboxAccount,
+  MailProtocol,
+  Project,
+  Client,
+  Settings,
+} from "@dash/collector/contract";
 
 /**
  * A mail inbox for the card. Histories are plain number series here (the wire

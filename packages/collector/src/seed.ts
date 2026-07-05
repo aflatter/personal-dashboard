@@ -1,4 +1,4 @@
-import type { BankState, Client, InboxAccount, MailProtocol, Settings } from "@dash/shared";
+import type { BankState, Client, InboxAccount, MailProtocol, Settings } from "./contract.ts";
 import type { Db } from "./store/db.ts";
 import { DAY, localDay } from "./time.ts";
 
