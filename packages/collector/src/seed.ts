@@ -31,7 +31,13 @@ export function seed(db: Db, now: number): void {
   seedInbox(
     db,
     "inbox:personal",
-    { account: "personal", email: "alex@flatter.io", protocol: "IMAP", unread: 12, total: 47 },
+    {
+      account: "personal",
+      email: "alex@flatter.io",
+      protocol: "JMAP",
+      unread: 12,
+      total: 47,
+    },
     [10, 13, 9, 12, 15, 11, 14, 12, 16, 13, 12],
     [44, 47, 43, 46, 48, 45, 47, 46, 49, 47, 47],
     now,
@@ -39,7 +45,13 @@ export function seed(db: Db, now: number): void {
   seedInbox(
     db,
     "inbox:work",
-    { account: "work", email: "alex@tevim.com", protocol: "Exchange", unread: 23, total: 138 },
+    {
+      account: "work",
+      email: "alex@tevim.com",
+      protocol: "JMAP",
+      unread: 23,
+      total: 138,
+    },
     [22, 26, 21, 28, 24, 23, 27, 25, 29, 24, 23],
     [132, 136, 130, 138, 134, 133, 137, 135, 140, 138, 138],
     now,
@@ -76,6 +88,10 @@ export function seed(db: Db, now: number): void {
   db.addEvent("rent_done", now - 12 * DAY);
   db.addEvent("tax_done", now - 26 * DAY);
 
-  const settings: Settings = { overdueThreshold: 21, dueSoonThreshold: 7, clockSeconds: false };
+  const settings: Settings = {
+    overdueThreshold: 21,
+    dueSoonThreshold: 7,
+    clockSeconds: false,
+  };
   db.putSettings(settings);
 }
