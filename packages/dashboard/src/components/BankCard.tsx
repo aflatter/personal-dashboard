@@ -12,6 +12,7 @@ import { Card, CardHeader, Pill, StatNumber, SyncButton } from "./ui";
 export function BankCard() {
   const { state, now, bankSyncing, syncBank } = useDashboardStore();
   const view = bankView(state.bank, now);
+  const { ok, error } = state.meta.bank;
   const label =
     view.syncedAt === null ? "nie synchronisiert" : `Sync: ${formatDayMonth(view.syncedAt)}`;
 
@@ -37,6 +38,8 @@ export function BankCard() {
           gap="gap-[6px]"
         />
       </div>
+      {/* The last sync failed (e.g. MoneyMoney locked) — show why; the count above is last-good. */}
+      {!ok && error ? <p className="text-[11px] text-status-overdue mt-3">{error}</p> : null}
     </Card>
   );
 }

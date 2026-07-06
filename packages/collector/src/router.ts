@@ -1,7 +1,6 @@
 import { z } from "zod";
 import type { Settings } from "./contract.ts";
-import { pollOnce } from "./sampling/sampler.ts";
-import { bankSource } from "./sources/index.ts";
+import { syncBankOnce } from "./sources/index.ts";
 import { buildState } from "./state.ts";
 import { publicProcedure, router } from "./trpc.ts";
 
@@ -45,15 +44,12 @@ export const appRouter = router({
   // latest assembled state (the inbox "sync" button's refresh).
   sync: publicProcedure.mutation(({ ctx }) => buildState(ctx.db)),
 
-  // On-demand MoneyMoney sync (it is not scheduled). `pollOnce` is fault-isolated:
-  // on failure it flips bank to ok:false with the error, never throwing out, so
-  // the mutation always returns coherent state and the card shows the staleness.
+  // On-demand MoneyMoney sync (it is not scheduled). Single-flight: concurrent
+  // callers coalesce into one osascript run. Fault-isolated — a locked / not-
+  // authorized MoneyMoney flips bank to ok:false with the error and the mutation
+  // still returns coherent state, so the card can surface it.
   syncBank: publicProcedure.mutation(async ({ ctx }) => {
-    if (!bankSource.ready(ctx.secrets)) {
-      ctx.db.markSourceError("bank", "MoneyMoney sync needs macOS", Date.now());
-    } else {
-      await pollOnce(ctx.db, bankSource, ctx.secrets, Date.now());
-    }
+    await syncBankOnce(ctx.db, ctx.secrets, Date.now());
     return buildState(ctx.db);
   }),
 });
