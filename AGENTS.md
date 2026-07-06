@@ -97,6 +97,58 @@ Rules:
   mutations, all returning fresh state). `localStorage` is only a render cache.
 - Functional components + hooks only. **Composition over inheritance.**
 
+## Design principles
+
+The "why" behind the boundaries above and the conventions below — distilled from
+how the data layer evolved. Apply them when adding a source, a mutation, or state.
+
+- **Match a source's cadence to its cost and preconditions.** Cheap, unattended
+  HTTP sources poll on the `scheduler`; a source that is expensive,
+  side-effecting, or needs a human precondition (an app unlocked, a permission
+  prompt) runs on an explicit user action, not a timer — and the user gesture
+  _is_ the opt-in, so a macOS Automation/TCC prompt fires exactly when asked,
+  never in the background. Don't add an env gate a gesture already provides (we
+  dropped `MONEYMONEY=1`). See `bankSource`/`syncBank`, kept out of `jobs` in
+  `packages/collector/src/sources/index.ts`.
+- **Reduce sensitive data at the boundary; never carry it inward.** When a source
+  touches private data, compute the scalar you need at the edge and return only
+  that — `moneymoney.ts`'s `COUNT_UNCHECKED` counts unchecked transactions inside
+  the JXA and returns a single integer, so transaction contents never enter the
+  collector process. Corollary for debugging such a source: inspect schema and
+  aggregate counts only, never individual records.
+- **Verify integration assumptions against the live source, not from memory.**
+  Field names, payload shapes, and identifiers are guesses until confirmed with a
+  minimal read-only/schema probe; leave a `VERIFY` comment where one is still
+  unconfirmed. (A bank "0 unchecked" was a wrong _assumed account name_, not the
+  checkmark logic — a schema probe showed `checkmark` is a boolean and the
+  placeholder account was simply empty.)
+- **Identify external entities by stable, unique keys — not display names.**
+  Prefer an IBAN/UUID/id over a human name that may be non-unique or change. Keep
+  environment-specific values (account names, IBANs, ids) out of the repo:
+  declare them in `secretspec.toml`/config with a documented fallback, alongside
+  the tokens.
+- **Single-flight expensive or side-effecting calls.** Concurrent triggers must
+  coalesce into one run — a client-side in-flight ref (`bankSyncing` in
+  `store/useDashboard.ts`) plus a server-side coalescer (`syncBankOnce` shares one
+  `bankInFlight` promise). Never spawn parallel subprocess/network calls for the
+  same logical action.
+- **Fail per-source, keep last-good, and say why.** A failing poll marks only that
+  source `ok:false` via `markSourceError` and keeps its last snapshot; siblings
+  keep serving (`scheduler.ts`/`sampling/sampler.ts`). Map low-level errors to
+  short, actionable messages at the boundary (`mapOsascriptError`: `-2720` →
+  "MoneyMoney is locked — unlock it and sync again") and surface them in the card
+  — never present a stale number as if it were fresh.
+- **Treat the domain as the trust boundary for its own inputs.** Derivations
+  normalize untrusted or legacy input to a safe semantic state instead of assuming
+  shape — `bankView` maps `null`/`undefined`/non-finite `syncedAt` to "never
+  synced" (a stale-shaped `localStorage` cache once crashed `Intl.format`). Pair
+  this with a versioned cache key (`dashboard-cache-v2`): bump it whenever the
+  cached shape changes so old-shaped data is dropped, not replayed.
+- **Keep commits building and split at clean seams.** When a change ripples (a
+  contract rename touching many files), land the coherent unit as one commit and
+  split only where a later commit purely adds on top — e.g. the feature first,
+  then the hardening. Each commit should type-check and test on its own.
+
 ## Conventions
 
 - **Language — English in code, German in the UI.** All code identifiers are
