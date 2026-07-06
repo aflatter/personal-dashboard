@@ -33,7 +33,7 @@ function run(argv) {
 `;
 
 /** Turn a raw osascript stderr into a short, actionable message. */
-function mapOsascriptError(stderr: string): string {
+export function mapOsascriptError(stderr: string): string {
   if (/-2720|Locked database/.test(stderr))
     return "MoneyMoney is locked — unlock it and sync again";
   if (/-1743|not authori[sz]ed|not allowed/i.test(stderr))

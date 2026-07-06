@@ -1,6 +1,7 @@
 import { pollOnce } from "../sampling/sampler.ts";
 import type { Secrets } from "../secrets.ts";
 import type { Job } from "../scheduler.ts";
+import type { Source } from "./port.ts";
 import type { Db } from "../store/db.ts";
 import { jmapInbox } from "./jmap.ts";
 import { moneyMoneyBank } from "./moneymoney.ts";
@@ -31,14 +32,22 @@ let bankInFlight: Promise<void> | null = null;
  * run — a second click (another tab, a rapid re-click) awaits the in-flight sync
  * instead of spawning a parallel AppleScript. `pollOnce` is fault-isolated, so a
  * failure (locked / not authorized) is recorded on the source, never thrown.
+ *
+ * `source` is injectable for tests; production always uses the `bankSource`
+ * singleton so the module-level in-flight ref coalesces every caller.
  */
-export function syncBankOnce(db: Db, secrets: Secrets, now: number): Promise<void> {
-  if (!bankSource.ready(secrets)) {
+export function syncBankOnce(
+  db: Db,
+  secrets: Secrets,
+  now: number,
+  source: Source = bankSource,
+): Promise<void> {
+  if (!source.ready(secrets)) {
     db.markSourceError("bank", "MoneyMoney sync needs macOS", now);
     return Promise.resolve();
   }
   if (!bankInFlight) {
-    bankInFlight = pollOnce(db, bankSource, secrets, now).finally(() => {
+    bankInFlight = pollOnce(db, source, secrets, now).finally(() => {
       bankInFlight = null;
     });
   }
