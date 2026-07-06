@@ -124,9 +124,10 @@ how the data layer evolved. Apply them when adding a source, a mutation, or stat
   placeholder account was simply empty.)
 - **Identify external entities by stable, unique keys — not display names.**
   Prefer an IBAN/UUID/id over a human name that may be non-unique or change. Keep
-  environment-specific values (account names, IBANs, ids) out of the repo:
-  declare them in `secretspec.toml`/config with a documented fallback, alongside
-  the tokens.
+  environment-specific values (account names, IBANs, ids) out of the repo: declare
+  them in `secretspec.toml`/config — and make them required with no hardcoded
+  fallback when guessing the wrong entity is worse than not running (the bank's
+  `MONEYMONEY_ACCOUNT` is a required IBAN, not a "Girokonto" default).
 - **Single-flight expensive or side-effecting calls.** Concurrent triggers must
   coalesce into one run — a client-side in-flight ref (`bankSyncing` in
   `store/useDashboard.ts`) plus a server-side coalescer (`syncBankOnce` shares one
@@ -184,8 +185,12 @@ how the data layer evolved. Apply them when adding a source, a mutation, or stat
   scheduler's `jobs`; the bank card's ↺ button calls the `syncBank` tRPC
   mutation, which polls it once (the manual trigger is the opt-in, so the macOS
   Automation/TCC prompt happens only when the user asks — needs MoneyMoney
-  unlocked). The card shows the last successful sync date and turns amber when the
-  data is stale (never synced, or > 7 days old, see `BANK_STALE_AFTER`).
+  unlocked). The account to read is `MONEYMONEY_ACCOUNT` — a **required** secret,
+  IBAN preferred (unique and stable, unlike an account name, which MoneyMoney
+  does not guarantee unique); there is no hardcoded default, so `bank` stays
+  not-ready until it is configured. The card shows the last successful sync date
+  and turns amber when the data is stale (never synced, or > 7 days old, see
+  `BANK_STALE_AFTER`).
 - **Sources degrade gracefully.** A source without its secret is skipped, and any
   poll failure marks only that source `ok:false` while the rest keep serving.
   Secrets are declared in `secretspec.toml` and loaded in-process at boot via the
