@@ -25,8 +25,8 @@ export interface InboxState {
 export interface BankState {
   /** Unreviewed transactions — the actionable backlog (hero number). */
   unchecked: number;
-  /** When the account was last reviewed, or null if unknown. */
-  lastCheckedAt: number | null;
+  /** When MoneyMoney was last successfully synced, or null if never. */
+  syncedAt: number | null;
 }
 
 export interface Project {

@@ -124,14 +124,19 @@ Rules:
 - **Data comes from the collector** (`node:sqlite`; seeded on first run via
   `packages/collector/src/seed.ts`). Real source adapters (JMAP/Fastmail,
   MoneyMoney via AppleScript, Toggl) live in `packages/collector/src/sources`
-  behind a common `Source` port; the `scheduler` polls them and the `sampler`
-  commits day-bucketed history. Add sources there, never in the SPA. Run both
-  services with `devenv up` (collector on `:4319`, dashboard on `:5173`, which
-  proxies `/api` → the collector).
-- **Sources degrade gracefully.** A source without its secret (or MoneyMoney
-  without `MONEYMONEY=1`) is skipped, and any poll failure marks only that
-  source `ok:false` while the rest keep serving. Secrets are declared in
-  `secretspec.toml` and loaded in-process at boot via the `secretspec` Node SDK
-  (`packages/collector/src/secrets.ts`) — configure the provider once with
-  `secretspec config` (1Password), or override via `SECRETSPEC_PROVIDER`. Enable
-  MoneyMoney with `MONEYMONEY=1` (needs it unlocked + macOS Automation permission).
+  behind a common `Source` port; the `scheduler` polls the HTTP sources and the
+  `sampler` commits day-bucketed history. Add sources there, never in the SPA.
+  Run both services with `devenv up` (collector on `:4319`, dashboard on `:5173`,
+  which proxies `/api` → the collector).
+- **MoneyMoney syncs on-demand, not on a timer.** It is absent from the
+  scheduler's `jobs`; the bank card's ↺ button calls the `syncBank` tRPC
+  mutation, which polls it once (the manual trigger is the opt-in, so the macOS
+  Automation/TCC prompt happens only when the user asks — needs MoneyMoney
+  unlocked). The card shows the last successful sync date and turns amber when the
+  data is stale (never synced, or > 7 days old, see `BANK_STALE_AFTER`).
+- **Sources degrade gracefully.** A source without its secret is skipped, and any
+  poll failure marks only that source `ok:false` while the rest keep serving.
+  Secrets are declared in `secretspec.toml` and loaded in-process at boot via the
+  `secretspec` Node SDK (`packages/collector/src/secrets.ts`) — configure the
+  provider once with `secretspec config` (1Password), or override via
+  `SECRETSPEC_PROVIDER`.

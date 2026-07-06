@@ -37,8 +37,8 @@ export interface Inbox {
 export interface Bank {
   /** Unreviewed transactions — the actionable backlog (hero number). */
   unchecked: number;
-  /** When the account was last reviewed → "geprüft vor {n} T". */
-  lastCheckedAt: number;
+  /** When MoneyMoney was last successfully synced, or null if never. */
+  syncedAt: number | null;
 }
 
 export type CounterStatus = "current" | "due-soon" | "overdue";

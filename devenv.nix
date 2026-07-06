@@ -18,7 +18,8 @@
   # worktrees don't collide. The dashboard waits for the collector's readiness
   # probe before starting; running just the dashboard task
   # (`devenv tasks run devenv:processes:dashboard`) pulls the collector in via
-  # that dependency. Set MONEYMONEY=1 to enable the opt-in MoneyMoney source.
+  # that dependency. MoneyMoney is not polled here — it syncs on-demand via the
+  # bank card's ↺ button (the collector's `syncBank` mutation).
   processes.collector = {
     exec = "COLLECTOR_PORT=${toString config.processes.collector.ports.http.value} node packages/collector/src/main.ts";
     ports.http.allocate = 4319;

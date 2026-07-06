@@ -1,23 +1,31 @@
 import { bankView } from "../domain";
+import { formatDayMonth } from "../presentation";
 import { useDashboardStore } from "../store/DashboardContext";
-import { Card, CardHeader, Pill, StatNumber } from "./ui";
+import { Card, CardHeader, Pill, StatNumber, SyncButton } from "./ui";
 
 /**
- * Spaßkonto (MoneyMoney) — the unreviewed-transaction backlog is the hero.
- * Read-only: MoneyMoney owns the checked/unchecked truth; the count falls as
- * items are reviewed there. When its source is stale the pill says so.
+ * Girokonto (MoneyMoney) — the unreviewed-transaction backlog is the hero.
+ * Read-only: MoneyMoney owns the checked/unchecked truth. MoneyMoney is synced
+ * on demand (the ↺ button), never on a timer; the pill shows when it was last
+ * synced and turns amber once the data is stale (never synced, or > 7 days old).
  */
 export function BankCard() {
-  const { state, now } = useDashboardStore();
+  const { state, now, bankSyncing, syncBank } = useDashboardStore();
   const view = bankView(state.bank, now);
-  const stale = !state.meta.bank.ok;
+  const label =
+    view.syncedAt === null ? "nie synchronisiert" : `Sync: ${formatDayMonth(view.syncedAt)}`;
 
   return (
     <Card>
       <CardHeader
-        title="Spaßkonto"
+        title="Girokonto"
         subtitle="MoneyMoney"
-        right={<Pill>{stale ? "MoneyMoney offline" : `geprüft vor ${view.sinceDays} T`}</Pill>}
+        right={
+          <div className="flex items-center gap-3">
+            <Pill stale={view.stale}>{label}</Pill>
+            <SyncButton syncing={bankSyncing} onClick={syncBank} />
+          </div>
+        }
       />
       <div className="flex items-end justify-between gap-3 mt-4">
         <StatNumber

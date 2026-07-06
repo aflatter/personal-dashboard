@@ -26,34 +26,39 @@ function toInbox(w: InboxState): Inbox {
   };
 }
 
-function mapState(wire: StateResponse, now: number): DashboardState {
+function mapState(wire: StateResponse): DashboardState {
   return {
     emails: { personal: toInbox(wire.inboxes.personal), work: toInbox(wire.inboxes.work) },
     clients: wire.hours.clients,
     rentDoneAt: wire.rent.doneAt,
     taxDoneAt: wire.tax.doneAt,
-    bank: { unchecked: wire.bank.unchecked, lastCheckedAt: wire.bank.lastCheckedAt ?? now },
+    bank: { unchecked: wire.bank.unchecked, syncedAt: wire.bank.syncedAt },
     settings: wire.settings,
     meta: wire.meta,
   };
 }
 
 export async function fetchState(): Promise<DashboardState> {
-  return mapState(await trpc.state.query(), Date.now());
+  return mapState(await trpc.state.query());
 }
 
 export async function markRentDone(): Promise<DashboardState> {
-  return mapState(await trpc.rentDone.mutate(), Date.now());
+  return mapState(await trpc.rentDone.mutate());
 }
 
 export async function markTaxDone(): Promise<DashboardState> {
-  return mapState(await trpc.taxDone.mutate(), Date.now());
+  return mapState(await trpc.taxDone.mutate());
 }
 
 export async function saveSettings(patch: Partial<Settings>): Promise<DashboardState> {
-  return mapState(await trpc.settings.mutate(patch), Date.now());
+  return mapState(await trpc.settings.mutate(patch));
 }
 
 export async function requestSync(): Promise<DashboardState> {
-  return mapState(await trpc.sync.mutate(), Date.now());
+  return mapState(await trpc.sync.mutate());
+}
+
+/** Trigger an on-demand MoneyMoney sync (the bank card's sync button). */
+export async function requestBankSync(): Promise<DashboardState> {
+  return mapState(await trpc.syncBank.mutate());
 }

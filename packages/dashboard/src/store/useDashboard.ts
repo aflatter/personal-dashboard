@@ -4,12 +4,14 @@ import {
   fetchState,
   markRentDone,
   markTaxDone,
+  requestBankSync,
   requestSync,
   saveSettings,
   type DashboardState,
 } from "../api/client";
 
-const CACHE_KEY = "dashboard-cache-v1";
+// Bump when the cached DashboardState shape changes so stale-shaped caches are dropped.
+const CACHE_KEY = "dashboard-cache-v2";
 const POLL_MS = 30_000;
 
 function loadCache(): DashboardState | null {
@@ -34,9 +36,12 @@ export interface DashboardStore {
   /** Wall-clock, refreshed every second (drives the clock + day counters). */
   now: number;
   syncing: boolean;
+  /** True while an on-demand MoneyMoney sync is in flight. */
+  bankSyncing: boolean;
   /** False when the last collector call failed — the UI is showing cached data. */
   online: boolean;
   sync: () => void;
+  syncBank: () => void;
   markRent: () => void;
   markTax: () => void;
   updateSettings: (partial: Partial<Settings>) => void;
@@ -47,8 +52,10 @@ export function useDashboard() {
   const [now, setNow] = useState(() => Date.now());
   const [state, setState] = useState<DashboardState | null>(() => loadCache());
   const [syncing, setSyncing] = useState(false);
+  const [bankSyncing, setBankSyncing] = useState(false);
   const [online, setOnline] = useState(true);
   const syncingRef = useRef(false);
+  const bankSyncingRef = useRef(false);
 
   const apply = useCallback((next: DashboardState) => {
     setState(next);
@@ -97,6 +104,21 @@ export function useDashboard() {
       });
   }, [apply]);
 
+  // On-demand MoneyMoney sync — can be slow (AppleScript) and can fail, so it
+  // carries its own in-flight flag independent of the inbox refresh.
+  const syncBank = useCallback(() => {
+    if (bankSyncingRef.current) return;
+    bankSyncingRef.current = true;
+    setBankSyncing(true);
+    requestBankSync()
+      .then(apply)
+      .catch(() => setOnline(false))
+      .finally(() => {
+        bankSyncingRef.current = false;
+        setBankSyncing(false);
+      });
+  }, [apply]);
+
   const markRent = useCallback(() => mutate(markRentDone()), [mutate]);
   const markTax = useCallback(() => mutate(markTaxDone()), [mutate]);
   const updateSettings = useCallback(
@@ -104,5 +126,16 @@ export function useDashboard() {
     [mutate],
   );
 
-  return { state, now, syncing, online, sync, markRent, markTax, updateSettings };
+  return {
+    state,
+    now,
+    syncing,
+    bankSyncing,
+    online,
+    sync,
+    syncBank,
+    markRent,
+    markTax,
+    updateSettings,
+  };
 }

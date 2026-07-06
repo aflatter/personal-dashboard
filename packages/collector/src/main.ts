@@ -19,12 +19,15 @@ if (db.isEmpty()) {
   console.log("seeded empty database");
 }
 
+const secrets = loadSecrets();
+
 // Poll real sources on their cadences (skips any without a secret / opt-in).
-startScheduler(db, loadSecrets(), jobs);
+// MoneyMoney is not here — it syncs on-demand via the `syncBank` mutation.
+startScheduler(db, secrets, jobs);
 
 // Own http server so we can bind loopback explicitly; tRPC handles the routing.
 // A plain /health route backs the devenv readiness probe (tRPC would 404 it).
-const handler = createHTTPHandler({ router: appRouter, createContext: () => ({ db }) });
+const handler = createHTTPHandler({ router: appRouter, createContext: () => ({ db, secrets }) });
 createServer((req, res) => {
   if (req.method === "GET" && req.url === "/health") {
     res.writeHead(204);

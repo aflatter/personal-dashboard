@@ -1,5 +1,7 @@
 import { z } from "zod";
 import type { Settings } from "./contract.ts";
+import { pollOnce } from "./sampling/sampler.ts";
+import { bankSource } from "./sources/index.ts";
 import { buildState } from "./state.ts";
 import { publicProcedure, router } from "./trpc.ts";
 
@@ -39,8 +41,21 @@ export const appRouter = router({
     return buildState(ctx.db);
   }),
 
-  // No adapters yet (Stage 3 wires real polling); just return current state.
+  // HTTP sources refresh themselves on the scheduler; this just returns the
+  // latest assembled state (the inbox "sync" button's refresh).
   sync: publicProcedure.mutation(({ ctx }) => buildState(ctx.db)),
+
+  // On-demand MoneyMoney sync (it is not scheduled). `pollOnce` is fault-isolated:
+  // on failure it flips bank to ok:false with the error, never throwing out, so
+  // the mutation always returns coherent state and the card shows the staleness.
+  syncBank: publicProcedure.mutation(async ({ ctx }) => {
+    if (!bankSource.ready(ctx.secrets)) {
+      ctx.db.markSourceError("bank", "MoneyMoney sync needs macOS", Date.now());
+    } else {
+      await pollOnce(ctx.db, bankSource, ctx.secrets, Date.now());
+    }
+    return buildState(ctx.db);
+  }),
 });
 
 export type AppRouter = typeof appRouter;

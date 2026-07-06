@@ -57,7 +57,7 @@ export function seed(db: Db, now: number): void {
     now,
   );
 
-  const bank: BankState = { unchecked: 34, lastCheckedAt: now - 5 * DAY };
+  const bank: BankState = { unchecked: 34, syncedAt: now - 5 * DAY };
   db.putSnapshot("bank", bank, now, true);
 
   const clients: Client[] = [
