@@ -1,7 +1,3 @@
 inputs:
   nixpkgs:
     url: github:cachix/devenv-nixpkgs/rolling
-secretspec:
-  enable: true
-  provider: onepassword://3HBLAKHC7NCG7KVQHTNPRWTMR4@Personal%20Dashboard
-  profile: default
