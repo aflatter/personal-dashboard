@@ -14,6 +14,14 @@ export interface Secrets {
   fastmailTokenWork?: string;
   togglApiToken?: string;
   togglWorkspaceId?: string;
+  /**
+   * Which MoneyMoney account to read. Not auth — just a selector. IBAN preferred
+   * (unique + stable); MoneyMoney also accepts UUID / account number / name /
+   * group name. Required in secretspec, so present whenever the load succeeds;
+   * still typed optional because a failed load yields an empty {} (bank is then
+   * gated off by its `ready`).
+   */
+  moneyMoneyAccount?: string;
 }
 
 const TOML_PATH =
@@ -42,6 +50,7 @@ export function loadSecrets(): Secrets {
       fastmailTokenWork: val("FASTMAIL_TOKEN_WORK"),
       togglApiToken: val("TOGGL_API_TOKEN"),
       togglWorkspaceId: val("TOGGL_WORKSPACE_ID"),
+      moneyMoneyAccount: val("MONEYMONEY_ACCOUNT"),
     };
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);

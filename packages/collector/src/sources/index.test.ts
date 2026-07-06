@@ -87,7 +87,9 @@ describe("syncBankOnce", () => {
     expect(polls()).toBe(0);
     const snap = db.getSnapshot<{ unchecked: number }>("bank");
     expect(snap?.ok).toBe(false);
-    expect(snap?.error).toContain("macOS");
+    // Reason is platform-derived (missing macOS vs. unconfigured account); both
+    // name MoneyMoney — assert the invariant, not the OS-specific wording.
+    expect(snap?.error).toContain("MoneyMoney");
     // Last-good snapshot is preserved, only liveness flipped.
     expect(snap?.data.unchecked).toBe(3);
   });

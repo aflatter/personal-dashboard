@@ -43,7 +43,11 @@ export function syncBankOnce(
   source: Source = bankSource,
 ): Promise<void> {
   if (!source.ready(secrets)) {
-    db.markSourceError("bank", "MoneyMoney sync needs macOS", now);
+    const reason =
+      process.platform !== "darwin"
+        ? "MoneyMoney sync needs macOS"
+        : "MoneyMoney account not configured (set MONEYMONEY_ACCOUNT)";
+    db.markSourceError("bank", reason, now);
     return Promise.resolve();
   }
   if (!bankInFlight) {

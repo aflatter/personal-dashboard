@@ -1,11 +1,11 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import type { BankState } from "../contract.ts";
+import type { Secrets } from "../secrets.ts";
 import type { Poll, Source } from "./port.ts";
 import { DAY } from "../time.ts";
 
 const run = promisify(execFile);
-const ACCOUNT = process.env.MONEYMONEY_ACCOUNT ?? "Girokonto";
 
 /**
  * JXA that exports the account's recent transactions, parses the plist, and
@@ -58,14 +58,20 @@ export function moneyMoneyBank(): Source {
   return {
     id: "bank",
     historyMetrics: [],
-    ready: () => process.platform === "darwin",
-    poll: async (): Promise<Poll> => {
+    // Needs macOS *and* a configured account selector (see secrets.ts). No
+    // hardcoded default: the account key is a personal detail that lives in
+    // config, so an unconfigured account means "don't guess", not "use Girokonto".
+    ready: (secrets: Secrets) =>
+      process.platform === "darwin" && Boolean(secrets.moneyMoneyAccount),
+    poll: async (secrets: Secrets): Promise<Poll> => {
+      const account = secrets.moneyMoneyAccount;
+      if (!account) throw new Error("MoneyMoney account not configured (set MONEYMONEY_ACCOUNT)");
       const from = new Date(Date.now() - 90 * DAY).toISOString().slice(0, 10);
       let stdout: string;
       try {
         ({ stdout } = await run(
           "osascript",
-          ["-l", "JavaScript", "-e", COUNT_UNCHECKED, ACCOUNT, from],
+          ["-l", "JavaScript", "-e", COUNT_UNCHECKED, account, from],
           { timeout: 15_000 },
         ));
       } catch (err) {
