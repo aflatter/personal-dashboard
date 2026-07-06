@@ -25,5 +25,9 @@ export function startScheduler(db: Db, secrets: Secrets, jobs: Job[]): void {
       setTimeout(() => void tick(), everyMs);
     };
     void tick();
+    // Sources that support server push refresh between ticks, near-instantly; the
+    // timer then only guarantees the daily history sample. `watch` is internally
+    // fault-isolated, so a dying stream can't disturb this loop or other sources.
+    source.watch?.(secrets, () => void pollOnce(db, source, secrets, Date.now()));
   }
 }

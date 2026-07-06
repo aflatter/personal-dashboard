@@ -8,17 +8,22 @@ import { moneyMoneyBank } from "./moneymoney.ts";
 import { togglHours } from "./toggl.ts";
 
 const MIN = 60_000;
+const DAY = 24 * 60 * MIN;
 
 /**
  * Per-source cadence. Freshness ≠ history resolution: pollers refresh the live
  * number on this cadence, but the sampler only commits one day-bucketed point.
  *
+ * The inboxes tick only once a day: JMAP push (see `jmapInbox`'s `watch`) keeps
+ * their live counts fresh within seconds, so the timer exists solely to
+ * guarantee one history sample on a day with no push activity.
+ *
  * Bank (MoneyMoney) is deliberately absent: it syncs on-demand only (see
  * `bankSource` + the router's `syncBank` mutation), never on a timer.
  */
 export const jobs: Job[] = [
-  { source: jmapInbox("inbox:personal", "personal", "fastmailTokenPersonal"), everyMs: 3 * MIN },
-  { source: jmapInbox("inbox:work", "work", "fastmailTokenWork"), everyMs: 3 * MIN },
+  { source: jmapInbox("inbox:personal", "personal", "fastmailTokenPersonal"), everyMs: DAY },
+  { source: jmapInbox("inbox:work", "work", "fastmailTokenWork"), everyMs: DAY },
   { source: togglHours(), everyMs: 60 * MIN },
 ];
 
