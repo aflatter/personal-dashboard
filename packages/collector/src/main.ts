@@ -23,7 +23,15 @@ if (db.isEmpty()) {
 startScheduler(db, loadSecrets(), jobs);
 
 // Own http server so we can bind loopback explicitly; tRPC handles the routing.
+// A plain /health route backs the devenv readiness probe (tRPC would 404 it).
 const handler = createHTTPHandler({ router: appRouter, createContext: () => ({ db }) });
-createServer(handler).listen(PORT, HOST, () => {
+createServer((req, res) => {
+  if (req.method === "GET" && req.url === "/health") {
+    res.writeHead(204);
+    res.end();
+    return;
+  }
+  handler(req, res);
+}).listen(PORT, HOST, () => {
   console.log(`collector listening on http://${HOST}:${PORT}`);
 });
