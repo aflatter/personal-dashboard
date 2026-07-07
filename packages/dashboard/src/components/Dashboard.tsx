@@ -13,7 +13,7 @@ export function Dashboard() {
     <div className="min-h-full px-6 pt-7 pb-10">
       <div className="max-w-[1120px] mx-auto">
         <DashboardHeader />
-        <div className="grid grid-cols-1 min-[900px]:grid-cols-3 gap-4 items-start">
+        <div className="grid grid-cols-1 min-[680px]:grid-cols-2 min-[1040px]:grid-cols-3 gap-4 items-start">
           <Column label="Persönlich" accent="#4F6BD8">
             <InboxCard account="personal" />
             <BankCard />

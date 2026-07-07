@@ -5,7 +5,8 @@
       "name": "dashboard",
       "runtimeExecutable": "devenv",
       "runtimeArgs": ["tasks", "run", "devenv:processes:dashboard"],
-      "port": 5173
+      "port": 5173,
+      "autoPort": true
     }
   ]
 }

@@ -13,10 +13,10 @@ export function CardHeader({
   return (
     <div className="flex items-start justify-between gap-3">
       <div className="min-w-0">
-        <div className="text-[15px] font-semibold">{title}</div>
-        {subtitle != null && <div className="text-[13px] text-secondary">{subtitle}</div>}
+        <div className="text-[15px] font-semibold truncate">{title}</div>
+        {subtitle != null && <div className="text-[13px] text-secondary truncate">{subtitle}</div>}
       </div>
-      {right != null && <div className="flex items-center gap-3">{right}</div>}
+      {right != null && <div className="flex items-center gap-3 shrink-0">{right}</div>}
     </div>
   );
 }
