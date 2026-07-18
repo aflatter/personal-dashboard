@@ -11,6 +11,30 @@
     "./contract": {
       "types": "./src/contract.ts",
       "default": "./src/contract.ts"
+    },
+    "./collector": {
+      "types": "./src/collector.ts",
+      "default": "./src/collector.ts"
+    },
+    "./secrets": {
+      "types": "./src/secrets.ts",
+      "default": "./src/secrets.ts"
+    },
+    "./sources/port": {
+      "types": "./src/sources/port.ts",
+      "default": "./src/sources/port.ts"
+    },
+    "./sources/jmap": {
+      "types": "./src/sources/jmap.ts",
+      "default": "./src/sources/jmap.ts"
+    },
+    "./sources/moneymoney": {
+      "types": "./src/sources/moneymoney.ts",
+      "default": "./src/sources/moneymoney.ts"
+    },
+    "./sources/toggl": {
+      "types": "./src/sources/toggl.ts",
+      "default": "./src/sources/toggl.ts"
     }
   },
   "scripts": {
