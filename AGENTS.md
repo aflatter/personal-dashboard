@@ -20,6 +20,16 @@ Docs are local at `node_modules/vite-plus/docs` or online at https://viteplus.de
 A single-screen, German (de-DE) personal dashboard. See `README.md` for the
 full overview; this file is the working contract for agents.
 
+## Git worktrees & subagents
+
+Work often happens from a git worktree under `.claude/worktrees/<name>/`, which
+is the **only** pre-approved directory for the session. When spawning subagents
+(Explore/Plan/etc.), pass the **worktree path** as the repo root — or no absolute
+repo path at all, letting them inherit `cwd`. Never hand a subagent the parent
+checkout path: reads there fall outside the sandbox and trigger a permission
+prompt on every file. Subagents should resolve all paths against `cwd` and never
+reach into the parent checkout.
+
 ## Environment & package manager
 
 - **devenv owns the runtime.** Enter the shell first: `devenv shell` provides
