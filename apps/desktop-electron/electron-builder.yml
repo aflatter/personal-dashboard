@@ -1,0 +1,38 @@
+# Packaging config (electron-builder). Run via `pnpm package` — it stages
+# .build/resources first (scripts/stage-resources.ts), which this file ships as
+# Contents/Resources/{collector,dist,secretspec.toml}.
+#
+# - asar: false — the main process is raw .ts run via Electron's Node
+#   type-stripping (same as dev); real files keep that path identical.
+# - productName lives HERE only, not in package.json: Electron derives the
+#   userData dir from package.json "name", so the packaged app keeps reusing
+#   ~/Library/Application Support/@dash/desktop-electron (data continuity
+#   between `pnpm start` and the installed .app).
+# - identity: null — unsigned (local personal install; Gatekeeper only gates
+#   downloaded apps). Developer-ID signing + notarization are a later step.
+appId: com.tevim.personal-dashboard
+productName: Personal Dashboard
+electronLanguages: [de, en]
+directories:
+  output: .build/out
+files:
+  - src/**/*
+  - package.json
+asar: false
+npmRebuild: false
+# The collector is NOT in extraResources: electron-builder silently drops
+# node_modules from extraResources copies (even with filter ["**/*"]), which
+# would strip the deployed collector's deps incl. the secretspec .node. The
+# afterPack hook copies it verbatim instead.
+afterPack: scripts/after-pack.cjs
+extraResources:
+  - from: .build/resources/dist
+    to: dist
+  - from: .build/resources/secretspec.toml
+    to: secretspec.toml
+mac:
+  target:
+    - target: dir
+      arch: arm64
+  identity: null
+  category: public.app-category.productivity

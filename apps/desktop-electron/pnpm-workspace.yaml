@@ -1,3 +1,8 @@
 # Marks this app as a standalone pnpm root: the Electron spike installs with
 # `pnpm install --ignore-workspace` (own lockfile) and deliberately stays out
 # of the repo workspace — see EVALUATION.md. No workspace packages here.
+
+# electron-winstaller is a Windows-only electron-builder dep; its build script
+# is unneeded on this macOS-only project.
+allowBuilds:
+  electron-winstaller: false

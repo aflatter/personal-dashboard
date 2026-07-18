@@ -29,9 +29,24 @@ import { startCollectorHost } from "./collector-host.ts";
 import type { CollectorHost } from "./collector-host.ts";
 
 const here = fileURLToPath(new URL(".", import.meta.url));
-const repoRoot = resolve(here, "../../..");
-const distDir = resolve(repoRoot, "packages/dashboard/dist");
 const preloadPath = resolve(here, "preload.js");
+
+// Dev runs against the workspace; the packaged .app carries a pnpm-deployed
+// collector, the SPA build, and secretspec.toml under Contents/Resources (see
+// scripts/stage-resources.ts + electron-builder.yml). Same code path either
+// way — only the roots differ.
+const repoRoot = resolve(here, "../../..");
+const resources = process.resourcesPath;
+const collectorDir = app.isPackaged
+  ? resolve(resources, "collector")
+  : resolve(repoRoot, "packages/collector");
+const distDir = app.isPackaged
+  ? resolve(resources, "dist")
+  : resolve(repoRoot, "packages/dashboard/dist");
+if (app.isPackaged) {
+  // The deployed tree's relative default would point outside Resources.
+  process.env.SECRETSPEC_PATH ??= resolve(resources, "secretspec.toml");
+}
 
 const HOST = process.env.COLLECTOR_HOST ?? "127.0.0.1";
 // 4390, not 4319: devenv up allocates the dev collector's port from 4319
@@ -164,6 +179,7 @@ async function boot(): Promise<void> {
     port: PORT,
     dbPath: resolve(app.getPath("userData"), "collector.db"),
     distDir,
+    collectorDir,
   });
   await waitForHealth(host.url);
   await createWindow();

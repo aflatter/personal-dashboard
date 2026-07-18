@@ -20,8 +20,15 @@ import { createServer } from "node:http";
 import type { ServerResponse } from "node:http";
 import { readFile, stat } from "node:fs/promises";
 import { extname, join, normalize } from "node:path";
-import { createCollector } from "../../../packages/collector/src/collector.ts";
-import { loadSecrets } from "../../../packages/collector/src/secrets.ts";
+import { pathToFileURL } from "node:url";
+
+// The collector lives at a different place per mode — the workspace package in
+// dev, the pnpm-deployed tree under Contents/Resources in the packaged .app —
+// so it is imported dynamically from opts.collectorDir. The `typeof import`
+// types are erased at runtime (the ../../../ specifier need not exist in the
+// packaged app) but give the dev workspace full type checking.
+type CollectorModule = typeof import("../../../packages/collector/src/collector.ts");
+type SecretsModule = typeof import("../../../packages/collector/src/secrets.ts");
 
 const MIME: Record<string, string> = {
   ".html": "text/html; charset=utf-8",
@@ -66,11 +73,17 @@ export interface CollectorHostOptions {
   port?: number;
   dbPath: string;
   distDir: string;
+  /** Directory of the collector package (contains src/ and node_modules). */
+  collectorDir: string;
 }
 
 /** Start the in-process collector + static SPA server on one loopback origin. */
 export async function startCollectorHost(opts: CollectorHostOptions): Promise<CollectorHost> {
-  const { host = "127.0.0.1", port = 4390, dbPath, distDir } = opts;
+  const { host = "127.0.0.1", port = 4390, dbPath, distDir, collectorDir } = opts;
+
+  const collectorUrl = (rel: string) => pathToFileURL(join(collectorDir, rel)).href;
+  const { createCollector } = (await import(collectorUrl("src/collector.ts"))) as CollectorModule;
+  const { loadSecrets } = (await import(collectorUrl("src/secrets.ts"))) as SecretsModule;
 
   const { handler } = createCollector({ dbPath, secrets: loadSecrets() });
 
