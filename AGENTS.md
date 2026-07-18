@@ -69,8 +69,12 @@ packages/
                  acquisition, day-bucketed history, and durable state in
                  node:sqlite; serves a tRPC API on 127.0.0.1 (loopback).
                  src/: contract (data types), trpc, router (the API), store/db,
-                 seed, state, main (+ sources/ in Stage 3).
-                 Exports: `.` → AppRouter type · `./contract` → data types.
+                 seed, state, sources/ (leaf adapters), registry (Secrets →
+                 configured sources), sync (on-demand bank sync), collector
+                 (createCollector factory), main (thin bin).
+                 Exports: `.` → AppRouter type · `./contract` → data types ·
+                 `./collector` → createCollector · `./secrets` → loader ·
+                 `./sources/{port,jmap,moneymoney,toggl}` → standalone sources.
   dashboard/     The SPA (Vite + React) — a typed tRPC client over the collector.
     src/
       domain/        Pure TS — NO React, NO colors/strings. Derivations (inbox,
@@ -105,7 +109,35 @@ Rules:
 - **The collector is the source of truth.** The SPA never owns data; it calls
   tRPC procedures (`state` query; `rentDone`/`taxDone`/`settings`/`sync`
   mutations, all returning fresh state). `localStorage` is only a render cache.
+- **Collector sources are leaf modules** (the fourth dependency-direction rule,
+  lint-enforced via `no-restricted-imports` in the root `vite.config.ts`): a
+  file under `collector/src/sources/` imports only Node builtins, `sources/*`
+  siblings, `time.ts`, and contract _types_ — never the engine (store, sampling,
+  scheduler, trpc, router) and never the secrets loader. Each source factory
+  takes its **narrow config** and closes over it (`poll()` takes no arguments;
+  constructors do no I/O); `src/registry.ts` — engine-side, deliberately not
+  under `sources/` — is the **only** reader of the whole `Secrets` bag and the
+  only place that gates ("needs macOS", "not configured"). This keeps every
+  source independently importable (e.g. by a future push agent) via the
+  `./sources/*` exports. `createCollector()` (`src/collector.ts`) is the one
+  composition point; `main.ts` and the desktop shell are thin consumers.
 - Functional components + hooks only. **Composition over inheritance.**
+
+## apps/ — desktop shell (outside the workspace)
+
+`apps/desktop-electron/` is the macOS Electron shell (a standalone pnpm root:
+install with `pnpm install --ignore-workspace`; its own `tsc --noEmit` is the
+typecheck — root `vp run -r` does not cover it). Boundaries:
+
+- **The shell owns no data.** It composes `createCollector()` in-process and
+  talks to it via `/api` like any other client (typed tRPC client, `AppRouter`
+  contract — never hand-written wire types). Data logic stays in the collector.
+- **The SPA must never require the preload bridge.** It stays a pure web client
+  (works when any browser points at the collector URL); `window.desktop` is for
+  desktop-only extras.
+- **Remind, don't auto-sync.** Shell duties may nudge (e.g. the bank-staleness
+  notification), but side-effecting syncs stay user gestures — the gesture is
+  the opt-in that scopes the macOS Automation/TCC prompt.
 
 ## Design principles
 
@@ -119,7 +151,8 @@ how the data layer evolved. Apply them when adding a source, a mutation, or stat
   _is_ the opt-in, so a macOS Automation/TCC prompt fires exactly when asked,
   never in the background. Don't add an env gate a gesture already provides (we
   dropped `MONEYMONEY=1`). See `bankSource`/`syncBank`, kept out of `jobs` in
-  `packages/collector/src/sources/index.ts`.
+  `buildBankSource` in `packages/collector/src/registry.ts` — the bank is
+  deliberately absent from `buildJobs`.
 - **Reduce sensitive data at the boundary; never carry it inward.** When a source
   touches private data, compute the scalar you need at the edge and return only
   that — `moneymoney.ts`'s `COUNT_UNCHECKED` counts unchecked transactions inside

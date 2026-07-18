@@ -20,11 +20,12 @@ TypeScript** (see "TypeScript everywhere" below), typechecked by its own
 - `src/probe.ts` — a main-process **feasibility probe** that asserts the two
   risky facts and the TypeScript story, then exits 0/1. This is the load-bearing
   artifact; its output is quoted below.
-- `src/collector-host.ts` — boots the collector **in-process** by importing its
-  real modules (`router.ts`, `store/db.ts`, `secrets.ts`, `seed.ts`,
-  `scheduler.ts`, `sources/index.ts`) **by path** and standing up the same
-  loopback HTTP server `collector/src/main.ts` uses — plus static SPA serving.
-- `src/main.ts` + `src/preload.ts` — the Electron host: boot the collector, wait
+- `src/collector-host.ts` — boots the collector **in-process** via its
+  `createCollector()` factory (statically imported, typed — since the
+  composability refactor; the spike originally re-wired collector internals by
+  path, which that refactor made unnecessary), plus static SPA serving and the
+  same-origin `/api` mount.
+- `src/main.ts` + `src/preload.js` — the Electron host: boot the collector, wait
   for `/health`, open a hardened `BrowserWindow` on the loopback origin.
 
 **Zero changes to `packages/*`.** The collector and SPA are reused byte-for-byte
