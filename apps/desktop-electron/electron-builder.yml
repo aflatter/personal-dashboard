@@ -31,6 +31,11 @@ afterPack: scripts/after-pack.cjs
 extraResources:
   - from: .build/resources
 mac:
+  # Bundle icon (Finder/Dock of the installed .app). Master lives at
+  # resources/icon/pulse-icon.svg; icon.icns is generated from Pulse.iconset via
+  # `iconutil` (see resources/icon/README.md). The runtime dev Dock icon is set
+  # separately in src/main.ts — the .icns only covers the packaged bundle.
+  icon: resources/icon/icon.icns
   target:
     - target: dir
       arch: arm64

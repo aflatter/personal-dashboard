@@ -30,6 +30,12 @@ import type { CollectorHost } from "./collector-host.ts";
 
 const here = fileURLToPath(new URL(".", import.meta.url));
 const preloadPath = resolve(here, "preload.js");
+// Dev-only Dock icon. The packaged .app carries its icon in the bundle (the
+// .icns wired via electron-builder.yml → mac.icon); a bare `pnpm start` runs the
+// node_modules Electron binary, which would otherwise show the generic Electron
+// tile. resources/ ships only in dev (not in the packaged files glob), hence the
+// !app.isPackaged guard.
+const devDockIcon = resolve(here, "../resources/icon/icon-512.png");
 
 // Dev runs against the workspace; the packaged .app carries a pnpm-deployed
 // collector, the SPA build, and secretspec.toml under Contents/Resources (see
@@ -167,6 +173,11 @@ async function checkBankReminder(): Promise<void> {
 // --- Boot ---------------------------------------------------------------------
 
 async function boot(): Promise<void> {
+  // Dev Dock icon (packaged builds get it from the bundle .icns instead).
+  if (!app.isPackaged && process.platform === "darwin") {
+    app.dock?.setIcon(devDockIcon);
+  }
+
   // Start at login (packaged builds only — in dev this would register the bare
   // node_modules Electron binary). Idempotent; shows up under macOS System
   // Settings → General → Login Items and can be disabled there.
