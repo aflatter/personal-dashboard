@@ -293,10 +293,18 @@ Decisions + gotchas (each cost real debugging — don't relearn them):
   app keeps reading `~/Library/Application Support/@dash/desktop-electron/` —
   data continuity between `pnpm start` and the `.app` (verified: real synced
   bank state served, not a fresh seed).
-- **electron-builder silently strips `node_modules` from extraResources**, even
-  with `filter: ["**/*"]` — which would gut the deployed collector. The
-  `afterPack` hook (`scripts/after-pack.cjs`) copies the collector tree verbatim
-  instead, and asserts the `.node` survived.
+- **A `node_modules` at a fileset's ROOT never ships — by design, and patterns
+  can't override it.** electron-builder's copy filter (app-builder-lib
+  `util/filter.js`) hard-rejects `relative === "node_modules"` before patterns
+  are consulted (hence `filter: ["**/*"]` doing nothing): builder manages the
+  app's own dependency closure itself and refuses to glob-copy a root
+  node*modules. The same source comment spells out the escape hatch — \_nested*
+  node_modules are deliberately allowed. Fix: root the extraResources fileset
+  one level ABOVE the deployed collector (`from: .build/resources`), so its
+  deps live at `collector/node_modules` — nested, shipped intact (verified,
+  plain copy, no hook). `scripts/after-pack.cjs` remains as a pure assert that
+  the secretspec `.node` made it, so re-rooting the fileset can never fail
+  silently again.
 - **`@trpc/server` must be a direct dependency.** `@trpc/client` imports it at
   runtime (peer); pnpm satisfies it invisibly in dev, but the packaged
   node_modules lacked it → the app died before its first log line. Symptom to

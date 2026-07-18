@@ -20,16 +20,16 @@ files:
   - package.json
 asar: false
 npmRebuild: false
-# The collector is NOT in extraResources: electron-builder silently drops
-# node_modules from extraResources copies (even with filter ["**/*"]), which
-# would strip the deployed collector's deps incl. the secretspec .node. The
-# afterPack hook copies it verbatim instead.
+# One fileset for ALL of .build/resources, deliberately rooted one level ABOVE
+# the collector: electron-builder's copy filter hard-rejects a node_modules
+# directory at the ROOT of a fileset (app-builder-lib util/filter.js — builder
+# manages the app's own deps and refuses to glob-copy a root node_modules),
+# but explicitly allows nested ones. With this root, the deployed collector's
+# deps live at collector/node_modules — nested, so they ship intact (the
+# afterPack hook asserts it).
 afterPack: scripts/after-pack.cjs
 extraResources:
-  - from: .build/resources/dist
-    to: dist
-  - from: .build/resources/secretspec.toml
-    to: secretspec.toml
+  - from: .build/resources
 mac:
   target:
     - target: dir
