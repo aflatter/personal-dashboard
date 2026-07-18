@@ -1,0 +1,202 @@
+// Electron main entry for the personal-dashboard desktop spike (macOS-only).
+//
+// This file is TypeScript, run directly by Electron's Node 24 via type-stripping
+// — no build step, same as the collector. Flow: on ready → boot the collector
+// in-process and wait for its loopback /health → open a hardened window on that
+// same loopback origin. Quit tears the collector down with the process (no
+// sidecar, no orphan). The one non-.ts file is preload.js (plain CJS) — a
+// sandboxed preload is loaded by Electron's own CJS loader, not Node's
+// type-stripping ESM loader, and it exposes almost nothing, so it stays JS.
+//
+// Desktop-shell duties (beyond showing the SPA):
+//   - login item: packaged builds register themselves to start at login
+//   - bank staleness reminder: if MoneyMoney data hasn't been synced for 3 days,
+//     post a macOS notification (at most once a day). Reminder only — the sync
+//     itself stays a deliberate user gesture (the bank card's ↺), so the macOS
+//     Automation/TCC prompt never fires unattended.
+// The reminder reads bank.syncedAt from the same /api/state the SPA uses, via
+// whatever origin the shell points at — in-process collector today, a remote
+// hub later. The mechanism survives the hub-and-spoke split unchanged.
+
+import { createTRPCClient, httpBatchLink } from "@trpc/client";
+import { app, BrowserWindow, Notification, powerMonitor } from "electron";
+import type { BrowserWindow as BrowserWindowType } from "electron";
+import { readFile, writeFile } from "node:fs/promises";
+import { resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+import type { AppRouter } from "../../../packages/collector/src/index.ts";
+import { startCollectorHost } from "./collector-host.ts";
+import type { CollectorHost } from "./collector-host.ts";
+
+const here = fileURLToPath(new URL(".", import.meta.url));
+const repoRoot = resolve(here, "../../..");
+const distDir = resolve(repoRoot, "packages/dashboard/dist");
+const preloadPath = resolve(here, "preload.js");
+
+const HOST = process.env.COLLECTOR_HOST ?? "127.0.0.1";
+// 4390, not 4319: devenv up allocates the dev collector's port from 4319
+// upward, so the desktop shell binds elsewhere to coexist with a dev session.
+const PORT = Number(process.env.COLLECTOR_PORT ?? 4390);
+
+const DAY = 24 * 60 * 60 * 1000;
+// Env-overridable for testing (ms). Defaults: remind after 3 days without a
+// bank sync, check hourly (plus on wake), nag at most once a day.
+const REMIND_AFTER = Number(process.env.BANK_REMIND_AFTER_MS ?? 3 * DAY);
+const REMIND_CHECK_EVERY = Number(process.env.BANK_REMIND_CHECK_MS ?? 60 * 60 * 1000);
+const NAG_AT_MOST_EVERY = Number(process.env.BANK_REMIND_NAG_MS ?? DAY);
+
+let host: CollectorHost | null = null;
+
+// One instance only: a login-item app relaunched by hand should focus the
+// existing window, not fight over the port and double-notify.
+if (!app.requestSingleInstanceLock()) {
+  app.exit(0);
+}
+app.on("second-instance", () => void focusWindow());
+
+async function waitForHealth(url: string, timeoutMs = 60_000): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  for (;;) {
+    try {
+      if ((await fetch(new URL("/health", url))).status === 204) return;
+    } catch {
+      /* not up yet */
+    }
+    if (Date.now() > deadline) throw new Error(`collector /health not ready within ${timeoutMs}ms`);
+    await new Promise((r) => setTimeout(r, 250));
+  }
+}
+
+async function createWindow(): Promise<BrowserWindowType> {
+  const win = new BrowserWindow({
+    width: 1280,
+    height: 832,
+    title: "Personal Dashboard",
+    backgroundColor: "#ffffff", // light-only UI
+    webPreferences: {
+      preload: preloadPath,
+      contextIsolation: true, // isolated worlds
+      nodeIntegration: false, // no Node in the renderer
+      sandbox: true,
+    },
+  });
+  await win.loadURL(host!.url);
+  return win;
+}
+
+async function focusWindow(): Promise<void> {
+  const win = BrowserWindow.getAllWindows()[0];
+  if (win) {
+    if (win.isMinimized()) win.restore();
+    win.show();
+    win.focus();
+  } else if (host) {
+    await createWindow();
+  }
+}
+
+// --- Bank staleness reminder -------------------------------------------------
+
+const nagFilePath = () => resolve(app.getPath("userData"), "bank-reminder.json");
+
+// Typed tRPC client against the in-process collector (same contract the SPA
+// consumes — AppRouter is the wire type, nothing hand-written). Created lazily
+// so it can point at whatever origin the host booted on.
+let trpc: ReturnType<typeof createTRPCClient<AppRouter>> | null = null;
+const client = (baseUrl: string) =>
+  (trpc ??= createTRPCClient<AppRouter>({
+    links: [httpBatchLink({ url: new URL("/api", baseUrl).href })],
+  }));
+
+/** German day phrase for the notification body (UI strings are de-DE). */
+function daysPhrase(ms: number): string {
+  const days = Math.floor(ms / DAY);
+  return days === 1 ? "1 Tag" : `${days} Tagen`;
+}
+
+async function checkBankReminder(): Promise<void> {
+  if (!host) return;
+  try {
+    const { bank } = await client(host.url).state.query();
+    const syncedAt = bank.syncedAt;
+    const now = Date.now();
+    const stale = syncedAt === null || now - syncedAt > REMIND_AFTER;
+    if (!stale) return;
+
+    // Nag throttle, persisted across restarts (a login-item app restarts often).
+    let lastNagged = 0;
+    try {
+      lastNagged =
+        (JSON.parse(await readFile(nagFilePath(), "utf8")) as { lastNagged?: number }).lastNagged ??
+        0;
+    } catch {
+      /* first nag */
+    }
+    if (now - lastNagged < NAG_AT_MOST_EVERY) return;
+
+    const body =
+      syncedAt === null
+        ? "Bankdaten wurden noch nie synchronisiert. MoneyMoney entsperren und im Dashboard ↺ drücken."
+        : `Letzte MoneyMoney-Synchronisierung vor ${daysPhrase(now - syncedAt)}. MoneyMoney entsperren und im Dashboard ↺ drücken.`;
+    const notification = new Notification({ title: "MoneyMoney-Daten veraltet", body });
+    notification.on("click", () => void focusWindow());
+    notification.show();
+    console.log(`[reminder] bank stale (syncedAt=${syncedAt ?? "never"}) — notification shown`);
+    await writeFile(nagFilePath(), JSON.stringify({ lastNagged: now }));
+  } catch (err) {
+    // The reminder is best-effort: never let it disturb the app.
+    console.warn("[reminder] check failed:", err instanceof Error ? err.message : String(err));
+  }
+}
+
+// --- Boot ---------------------------------------------------------------------
+
+async function boot(): Promise<void> {
+  // Start at login (packaged builds only — in dev this would register the bare
+  // node_modules Electron binary). Idempotent; shows up under macOS System
+  // Settings → General → Login Items and can be disabled there.
+  if (app.isPackaged) {
+    app.setLoginItemSettings({ openAtLogin: true });
+  }
+
+  host = await startCollectorHost({
+    host: HOST,
+    port: PORT,
+    dbPath: resolve(app.getPath("userData"), "collector.db"),
+    distDir,
+  });
+  await waitForHealth(host.url);
+  await createWindow();
+
+  // Reminder cadence: at boot, hourly, and on wake from sleep (a laptop that
+  // sleeps through the hourly timer still gets checked promptly).
+  void checkBankReminder();
+  setInterval(() => void checkBankReminder(), REMIND_CHECK_EVERY);
+  powerMonitor.on("resume", () => void checkBankReminder());
+}
+
+app
+  .whenReady()
+  .then(boot)
+  .catch((err: unknown) => {
+    console.error("[main] boot failed:", err);
+    app.exit(1);
+  });
+
+app.on("activate", () => void focusWindow());
+
+// macOS convention: closing the window keeps the app (and the reminder timer)
+// alive in the dock; Cmd-Q quits. Quitting on close would silently disable the
+// reminder duty this shell now carries.
+app.on("window-all-closed", () => {
+  if (process.platform !== "darwin") app.quit();
+});
+
+app.on("will-quit", (e) => {
+  if (host) {
+    e.preventDefault();
+    const h = host;
+    host = null;
+    void h.close().then(() => app.quit());
+  }
+});

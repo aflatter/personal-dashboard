@@ -1,0 +1,3 @@
+# Marks this app as a standalone pnpm root: the Electron spike installs with
+# `pnpm install --ignore-workspace` (own lockfile) and deliberately stays out
+# of the repo workspace — see EVALUATION.md. No workspace packages here.

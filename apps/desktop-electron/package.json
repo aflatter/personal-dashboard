@@ -1,0 +1,21 @@
+{
+  "name": "@dash/desktop-electron",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Electron packaging spike for personal-dashboard (macOS-only). Not part of the pnpm workspace.",
+  "type": "module",
+  "main": "src/main.ts",
+  "scripts": {
+    "probe": "electron src/probe.ts",
+    "start": "electron .",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@trpc/client": "^11.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^24.7.0",
+    "electron": "43.1.1",
+    "typescript": "^6.0.3"
+  }
+}
