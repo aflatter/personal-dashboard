@@ -1,4 +1,3 @@
-import type { Secrets } from "../secrets.ts";
 import type { Source, Poll } from "../sources/port.ts";
 import type { Db } from "../store/db.ts";
 import { localDay } from "../time.ts";
@@ -21,14 +20,9 @@ export function commit(db: Db, source: Source, poll: Poll, now: number): void {
  * `ok:false` (keeping its last-good snapshot) and the error recorded — it never
  * throws out, so one failing source can't disturb the others.
  */
-export async function pollOnce(
-  db: Db,
-  source: Source,
-  secrets: Secrets,
-  now: number,
-): Promise<void> {
+export async function pollOnce(db: Db, source: Source, now: number): Promise<void> {
   try {
-    commit(db, source, await source.poll(secrets), now);
+    commit(db, source, await source.poll(), now);
   } catch (err) {
     db.markSourceError(source.id, err instanceof Error ? err.message : String(err), now);
   }

@@ -1,0 +1,64 @@
+import type { InboxAccount, SourceId } from "./contract.ts";
+import type { Job } from "./scheduler.ts";
+import type { Secrets } from "./secrets.ts";
+import { jmapInbox } from "./sources/jmap.ts";
+import { moneyMoneyBank } from "./sources/moneymoney.ts";
+import type { Source } from "./sources/port.ts";
+import { togglHours } from "./sources/toggl.ts";
+
+const MIN = 60_000;
+const DAY = 24 * 60 * MIN;
+
+/**
+ * The registry is the single place that reads the whole `Secrets` bag and turns
+ * it into configured sources — each factory receives only its own narrow config
+ * (least privilege). An unconfigured source is simply not constructed; there is
+ * no `ready()` gate on the port. Construction is pure wiring (no I/O).
+ *
+ * Per-source cadence: freshness ≠ history resolution. Pollers refresh the live
+ * number on this cadence, but the sampler only commits one day-bucketed point.
+ * The inboxes tick only once a day: JMAP push (`watch`) keeps their live counts
+ * fresh within seconds, so the timer exists solely to guarantee one history
+ * sample on a day with no push activity.
+ *
+ * Bank (MoneyMoney) is deliberately absent from the jobs: it syncs on-demand
+ * only (see `buildBankSource` + the router's `syncBank` mutation), never on a
+ * timer.
+ */
+export function buildJobs(secrets: Secrets): Job[] {
+  const jobs: Job[] = [];
+  const skip = (id: SourceId) => console.log(`source ${id}: not configured — skipping`);
+
+  const inbox = (id: SourceId, account: InboxAccount, token: string | undefined) =>
+    token ? jobs.push({ source: jmapInbox(id, account, { token }), everyMs: DAY }) : skip(id);
+  inbox("inbox:personal", "personal", secrets.fastmailTokenPersonal);
+  inbox("inbox:work", "work", secrets.fastmailTokenWork);
+
+  if (secrets.togglApiToken && secrets.togglWorkspaceId) {
+    jobs.push({
+      source: togglHours({
+        apiToken: secrets.togglApiToken,
+        workspaceId: secrets.togglWorkspaceId,
+      }),
+      everyMs: 60 * MIN,
+    });
+  } else {
+    skip("hours");
+  }
+
+  return jobs;
+}
+
+/**
+ * The bank source when it can run here, else the human-facing reason it can't —
+ * surfaced on the bank card via `syncBankOnce`'s markSourceError.
+ */
+export type BankGate = { source: Source; reason?: undefined } | { source: null; reason: string };
+
+export function buildBankSource(secrets: Secrets): BankGate {
+  if (process.platform !== "darwin") return { source: null, reason: "MoneyMoney sync needs macOS" };
+  if (!secrets.moneyMoneyAccount) {
+    return { source: null, reason: "MoneyMoney account not configured (set MONEYMONEY_ACCOUNT)" };
+  }
+  return { source: moneyMoneyBank({ account: secrets.moneyMoneyAccount }) };
+}

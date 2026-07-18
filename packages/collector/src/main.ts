@@ -1,11 +1,11 @@
 import { createServer } from "node:http";
 import { fileURLToPath } from "node:url";
 import { createHTTPHandler } from "@trpc/server/adapters/standalone";
+import { buildBankSource, buildJobs } from "./registry.ts";
 import { appRouter } from "./router.ts";
 import { loadSecrets } from "./secrets.ts";
 import { seed } from "./seed.ts";
 import { startScheduler } from "./scheduler.ts";
-import { jobs } from "./sources/index.ts";
 import { Db } from "./store/db.ts";
 
 const HOST = process.env.COLLECTOR_HOST ?? "127.0.0.1";
@@ -20,14 +20,15 @@ if (db.isEmpty()) {
 }
 
 const secrets = loadSecrets();
+const bank = buildBankSource(secrets);
 
-// Poll real sources on their cadences (skips any without a secret / opt-in).
+// Poll real sources on their cadences (the registry skips any without a secret).
 // MoneyMoney is not here — it syncs on-demand via the `syncBank` mutation.
-startScheduler(db, secrets, jobs);
+startScheduler(db, buildJobs(secrets));
 
 // Own http server so we can bind loopback explicitly; tRPC handles the routing.
 // A plain /health route backs the devenv readiness probe (tRPC would 404 it).
-const handler = createHTTPHandler({ router: appRouter, createContext: () => ({ db, secrets }) });
+const handler = createHTTPHandler({ router: appRouter, createContext: () => ({ db, bank }) });
 createServer((req, res) => {
   if (req.method === "GET" && req.url === "/health") {
     res.writeHead(204);

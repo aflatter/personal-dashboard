@@ -1,6 +1,6 @@
 import { z } from "zod";
 import type { Settings } from "./contract.ts";
-import { syncBankOnce } from "./sources/index.ts";
+import { syncBankOnce } from "./sync.ts";
 import { buildState } from "./state.ts";
 import { publicProcedure, router } from "./trpc.ts";
 
@@ -49,7 +49,7 @@ export const appRouter = router({
   // authorized MoneyMoney flips bank to ok:false with the error and the mutation
   // still returns coherent state, so the card can surface it.
   syncBank: publicProcedure.mutation(async ({ ctx }) => {
-    await syncBankOnce(ctx.db, ctx.secrets, Date.now());
+    await syncBankOnce(ctx.db, ctx.bank, Date.now());
     return buildState(ctx.db);
   }),
 });

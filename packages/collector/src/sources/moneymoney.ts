@@ -1,7 +1,6 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import type { BankState } from "../contract.ts";
-import type { Secrets } from "../secrets.ts";
 import type { Poll, Source } from "./port.ts";
 import { DAY } from "../time.ts";
 
@@ -43,35 +42,39 @@ export function mapOsascriptError(stderr: string): string {
   return `MoneyMoney sync failed: ${last.replace(/^execution error:\s*/i, "").trim()}`;
 }
 
+export interface MoneyMoneyConfig {
+  /**
+   * Which MoneyMoney account to read. Not auth — just a selector. IBAN preferred
+   * (unique + stable); MoneyMoney also accepts UUID / account number / name /
+   * group name.
+   */
+  account: string;
+}
+
 /**
  * Bank review backlog from MoneyMoney. Read-only: MoneyMoney owns the
  * checked/unchecked truth; the count falls as items are reviewed there. Requires
- * MoneyMoney running + unlocked and the collector granted macOS Automation (TCC)
- * permission — when it is locked the export throws (`Locked database`), surfacing
- * as `ok:false` while the last-good count stays put.
+ * macOS, MoneyMoney running + unlocked, and the caller granted macOS Automation
+ * (TCC) permission — when it is locked the export throws (`Locked database`),
+ * surfacing as `ok:false` while the last-good count stays put. Environment
+ * gating (platform, configured account) lives in the registry, not here — this
+ * factory assumes it is constructed on a Mac with a real account selector.
  *
  * Unlike the HTTP sources this is NOT on the scheduler — it syncs only when the
  * user hits the bank card's sync button (the manual trigger is the opt-in, so the
  * one-off TCC prompt happens exactly when they asked for it, never unattended).
  */
-export function moneyMoneyBank(): Source {
+export function moneyMoneyBank(cfg: MoneyMoneyConfig): Source {
   return {
     id: "bank",
     historyMetrics: [],
-    // Needs macOS *and* a configured account selector (see secrets.ts). No
-    // hardcoded default: the account key is a personal detail that lives in
-    // config, so an unconfigured account means "don't guess", not "use Girokonto".
-    ready: (secrets: Secrets) =>
-      process.platform === "darwin" && Boolean(secrets.moneyMoneyAccount),
-    poll: async (secrets: Secrets): Promise<Poll> => {
-      const account = secrets.moneyMoneyAccount;
-      if (!account) throw new Error("MoneyMoney account not configured (set MONEYMONEY_ACCOUNT)");
+    poll: async (): Promise<Poll> => {
       const from = new Date(Date.now() - 90 * DAY).toISOString().slice(0, 10);
       let stdout: string;
       try {
         ({ stdout } = await run(
           "osascript",
-          ["-l", "JavaScript", "-e", COUNT_UNCHECKED, account, from],
+          ["-l", "JavaScript", "-e", COUNT_UNCHECKED, cfg.account, from],
           { timeout: 15_000 },
         ));
       } catch (err) {

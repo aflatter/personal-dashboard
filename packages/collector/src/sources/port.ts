@@ -1,5 +1,4 @@
 import type { SourceId } from "../contract.ts";
-import type { Secrets } from "../secrets.ts";
 
 /** The result of polling a source: current values to sample + the snapshot to store. */
 export interface Poll {
@@ -10,15 +9,19 @@ export interface Poll {
 }
 
 /**
- * A pollable data source. `ready` gates whether it can run (secret present, right
- * platform, opt-in flag); `poll` fetches the current value. History accumulation
- * is the sampler's job, driven by `historyMetrics`.
+ * A pollable data source. Construction is configuration: each factory takes the
+ * narrow config it needs (a token, an account selector) and closes over it — an
+ * unconfigured source is simply never constructed (see ../registry.ts), so there
+ * is no readiness gate and `poll()` takes no arguments. Constructors do no I/O.
+ *
+ * Sources are leaf modules (lint-enforced, see .oxlintrc.json): node builtins,
+ * sources/* siblings, time.ts, and contract types only — never the engine
+ * (store/sampling/scheduler/trpc) and never the secrets loader.
  */
 export interface Source {
   readonly id: SourceId;
   readonly historyMetrics: string[];
-  ready(secrets: Secrets): boolean;
-  poll(secrets: Secrets): Promise<Poll>;
+  poll(): Promise<Poll>;
   /**
    * Optional server push. Opens a live stream and invokes `onChange` whenever the
    * upstream signals new data, so the caller can re-`poll` near-instantly instead
@@ -27,5 +30,5 @@ export interface Source {
    * dying can't disturb another source or the HTTP server. Sources without push
    * omit this and rely on their timer alone.
    */
-  watch?(secrets: Secrets, onChange: () => void): () => void;
+  watch?(onChange: () => void): () => void;
 }

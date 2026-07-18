@@ -36,15 +36,19 @@ async function togglJson<T>(url: string, auth: string, init?: RequestInit): Prom
   return (await res.json()) as T;
 }
 
+export interface TogglConfig {
+  apiToken: string;
+  workspaceId: string;
+}
+
 /** This month's billed hours by client → project. Aggregate → no daily history. */
-export function togglHours(): Source {
+export function togglHours(cfg: TogglConfig): Source {
   return {
     id: "hours",
     historyMetrics: [],
-    ready: (secrets) => Boolean(secrets.togglApiToken && secrets.togglWorkspaceId),
-    poll: async (secrets): Promise<Poll> => {
-      const auth = Buffer.from(`${secrets.togglApiToken}:api_token`).toString("base64");
-      const wid = secrets.togglWorkspaceId;
+    poll: async (): Promise<Poll> => {
+      const auth = Buffer.from(`${cfg.apiToken}:api_token`).toString("base64");
+      const wid = cfg.workspaceId;
       const { start_date, end_date } = monthRange(Date.now());
 
       const [summary, clientList, projectList] = await Promise.all([

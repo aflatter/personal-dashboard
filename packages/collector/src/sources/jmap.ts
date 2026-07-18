@@ -28,7 +28,10 @@ const COALESCE_MS = 250;
 const BASE_BACKOFF_MS = 1_000;
 const MAX_BACKOFF_MS = 60_000;
 
-type TokenField = "fastmailTokenPersonal" | "fastmailTokenWork";
+export interface JmapConfig {
+  /** Fastmail API token for one account (personal and work differ only by token). */
+  token: string;
+}
 
 interface Session {
   apiUrl: string;
@@ -243,21 +246,19 @@ function errMsg(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
 }
 
-/** One inbox source per Fastmail account (personal/work differ only by token). */
-export function jmapInbox(id: SourceId, account: InboxAccount, tokenField: TokenField): Source {
+/** One inbox source per Fastmail account, closed over its own token. */
+export function jmapInbox(id: SourceId, account: InboxAccount, cfg: JmapConfig): Source {
   return {
     id,
     historyMetrics: ["unread", "total"],
-    ready: (secrets) => Boolean(secrets[tokenField]),
-    poll: async (secrets): Promise<Poll> => {
-      const token = secrets[tokenField]!;
-      const session = await openSession(token);
-      const { unread, total } = await inboxCounts(session, token);
+    poll: async (): Promise<Poll> => {
+      const session = await openSession(cfg.token);
+      const { unread, total } = await inboxCounts(session, cfg.token);
       return {
         metrics: { unread, total },
         snapshot: { account, email: session.email, protocol: "JMAP", unread, total },
       };
     },
-    watch: (secrets, onChange) => startPush(secrets[tokenField]!, id, onChange),
+    watch: (onChange) => startPush(cfg.token, id, onChange),
   };
 }

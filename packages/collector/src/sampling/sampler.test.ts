@@ -11,7 +11,6 @@ function fakeSource(over: Partial<Source> = {}): Source {
   return {
     id: "inbox:personal",
     historyMetrics: ["unread", "total"],
-    ready: () => true,
     poll: async () => ({ metrics: { unread: 5, total: 9 }, snapshot: { unread: 5, total: 9 } }),
     ...over,
   };
@@ -36,7 +35,7 @@ describe("commit", () => {
 describe("pollOnce", () => {
   it("records a successful poll", async () => {
     const db = new Db(":memory:");
-    await pollOnce(db, fakeSource(), {}, NOW);
+    await pollOnce(db, fakeSource(), NOW);
     expect(db.getSnapshot("inbox:personal")?.ok).toBe(true);
   });
 
@@ -48,7 +47,7 @@ describe("pollOnce", () => {
         throw new Error("boom");
       },
     });
-    await expect(pollOnce(db, throwing, {}, NOW)).resolves.toBeUndefined();
+    await expect(pollOnce(db, throwing, NOW)).resolves.toBeUndefined();
     const snap = db.getSnapshot("inbox:personal");
     expect(snap?.ok).toBe(false);
     expect(snap?.error).toContain("boom");
