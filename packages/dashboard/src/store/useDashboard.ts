@@ -7,6 +7,7 @@ import {
   requestBankSync,
   requestSync,
   saveSettings,
+  subscribeState,
   type DashboardState,
 } from "../api/client";
 
@@ -69,7 +70,8 @@ export function useDashboard() {
     return () => clearInterval(id);
   }, []);
 
-  // Initial load + background poll.
+  // Initial load + background poll. The poll is a safety net behind the live SSE
+  // subscription below: if the stream drops, the UI still reconciles every POLL_MS.
   useEffect(() => {
     let alive = true;
     const load = () =>
@@ -82,6 +84,13 @@ export function useDashboard() {
       alive = false;
       clearInterval(id);
     };
+  }, [apply]);
+
+  // Live updates: the collector pushes fresh state over SSE the moment it changes
+  // (a poll commit — including a Fastmail push — or a mutation), so the widgets
+  // track the mailbox within a second rather than on the next poll tick.
+  useEffect(() => {
+    return subscribeState(apply, () => setOnline(false));
   }, [apply]);
 
   const mutate = useCallback(

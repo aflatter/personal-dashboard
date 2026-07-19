@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { BankGate } from "./registry.ts";
 import type { Poll, Source } from "./sources/port.ts";
 import { Db } from "./store/db.ts";
-import { syncBankOnce } from "./sync.ts";
+import { syncBankOnce, syncInboxesOnce } from "./sync.ts";
 
 const NOW = new Date(2026, 5, 24, 12, 0, 0).getTime();
 
@@ -84,5 +84,105 @@ describe("syncBankOnce", () => {
     expect(snap?.error).toBe("MoneyMoney sync needs macOS");
     // Last-good snapshot is preserved, only liveness flipped.
     expect(snap?.data.unchecked).toBe(3);
+  });
+});
+
+/** A fake inbox source that counts polls and returns given counts. */
+function inboxFake(
+  id: "inbox:personal" | "inbox:work",
+  unread: number,
+  total: number,
+): { source: Source; polls: () => number } {
+  let polls = 0;
+  const account = id === "inbox:personal" ? "personal" : "work";
+  const source: Source = {
+    id,
+    historyMetrics: ["unread", "total"],
+    poll: async (): Promise<Poll> => {
+      polls++;
+      return {
+        metrics: { unread, total },
+        snapshot: { account, email: `${account}@example.com`, protocol: "JMAP", unread, total },
+      };
+    },
+  };
+  return { source, polls: () => polls };
+}
+
+describe("syncInboxesOnce", () => {
+  it("polls every inbox and writes fresh snapshots", async () => {
+    const db = new Db(":memory:");
+    const personal = inboxFake("inbox:personal", 5, 40);
+    const work = inboxFake("inbox:work", 1, 12);
+
+    await syncInboxesOnce(db, [personal.source, work.source], NOW);
+
+    expect(personal.polls()).toBe(1);
+    expect(work.polls()).toBe(1);
+    expect(db.getSnapshot<{ unread: number }>("inbox:personal")?.data.unread).toBe(5);
+    expect(db.getSnapshot<{ total: number }>("inbox:work")?.data.total).toBe(12);
+  });
+
+  it("coalesces concurrent callers into a single round of polls", async () => {
+    const db = new Db(":memory:");
+    const gate = deferred<void>();
+    let polls = 0;
+    const source: Source = {
+      id: "inbox:personal",
+      historyMetrics: ["unread", "total"],
+      poll: async (): Promise<Poll> => {
+        polls++;
+        await gate.promise;
+        return {
+          metrics: { unread: 5, total: 40 },
+          snapshot: {
+            account: "personal",
+            email: "p@example.com",
+            protocol: "JMAP",
+            unread: 5,
+            total: 40,
+          },
+        };
+      },
+    };
+
+    const p1 = syncInboxesOnce(db, [source], NOW);
+    const p2 = syncInboxesOnce(db, [source], NOW);
+
+    expect(polls).toBe(1);
+    expect(p1).toBe(p2);
+
+    gate.resolve();
+    await Promise.all([p1, p2]);
+    expect(polls).toBe(1);
+  });
+
+  it("isolates a failing account — the other still updates and it never throws", async () => {
+    const db = new Db(":memory:");
+    // A prior snapshot exists (seeded in prod); markSourceError flips its liveness.
+    db.putSnapshot(
+      "inbox:personal",
+      { account: "personal", email: "p@example.com", protocol: "JMAP", unread: 9, total: 44 },
+      NOW,
+      true,
+    );
+    const ok = inboxFake("inbox:work", 1, 12);
+    const failing: Source = {
+      id: "inbox:personal",
+      historyMetrics: ["unread", "total"],
+      poll: async (): Promise<Poll> => {
+        throw new Error("token rejected");
+      },
+    };
+
+    await expect(syncInboxesOnce(db, [failing, ok.source], NOW)).resolves.toBeUndefined();
+
+    expect(ok.polls()).toBe(1);
+    expect(db.getSnapshot<{ total: number }>("inbox:work")?.data.total).toBe(12);
+    const bad = db.getSnapshot<{ unread: number }>("inbox:personal");
+    expect(bad?.ok).toBe(false);
+    expect(bad?.error).toBe("token rejected");
+    // Last-good counts preserved, only liveness flipped.
+    expect(bad?.data.unread).toBe(9);
   });
 });

@@ -1,3 +1,4 @@
+import { EventEmitter } from "node:events";
 import type { RequestListener } from "node:http";
 import { createHTTPHandler } from "@trpc/server/adapters/standalone";
 import { buildBankSource, buildJobs } from "./registry.ts";
@@ -41,13 +42,25 @@ export function createCollector(opts: CollectorOptions): Collector {
 
   const bank = buildBankSource(opts.secrets);
 
+  // Fires "change" whenever stored state moves, so the live `onStateChange`
+  // subscription re-emits. One listener per open browser tab — lift the default
+  // cap so many tabs don't trip a MaxListeners warning.
+  const bus = new EventEmitter();
+  bus.setMaxListeners(0);
+
   // Poll real sources on their cadences (the registry skips any without a
-  // secret). MoneyMoney is not here — it syncs on-demand via `syncBank`.
-  startScheduler(db, buildJobs(opts.secrets));
+  // secret). MoneyMoney is not here — it syncs on-demand via `syncBank`. Each
+  // committed poll (timer or JMAP push) pings the bus so live subscribers update.
+  const jobs = buildJobs(opts.secrets);
+  startScheduler(db, jobs, () => bus.emit("change"));
+
+  // The inbox sources also back the inbox sync button's on-demand poll, so hand
+  // them to the API context (only those actually configured are present).
+  const inboxes = jobs.map((j) => j.source).filter((s) => s.id.startsWith("inbox:"));
 
   const trpcHandler = createHTTPHandler({
     router: appRouter,
-    createContext: () => ({ db, bank }),
+    createContext: () => ({ db, bank, inboxes, bus }),
   });
 
   // A plain /health route backs readiness probes (tRPC would 404 it).

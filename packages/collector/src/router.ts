@@ -1,6 +1,7 @@
+import { on } from "node:events";
 import { z } from "zod";
 import type { Settings } from "./contract.ts";
-import { syncBankOnce } from "./sync.ts";
+import { syncBankOnce, syncInboxesOnce } from "./sync.ts";
 import { buildState } from "./state.ts";
 import { publicProcedure, router } from "./trpc.ts";
 
@@ -23,13 +24,28 @@ const settingsPatch = z
 export const appRouter = router({
   state: publicProcedure.query(({ ctx }) => buildState(ctx.db)),
 
+  // Live state: yields the current state immediately, then again every time the
+  // change bus fires (a poll committed — including a JMAP push — or a mutation).
+  // This is the collector → browser push that mirrors the Fastmail → collector
+  // one, so the UI reflects a mailbox change within a second instead of waiting
+  // for the client's fallback poll. `on(..., { signal })` unwinds and drops the
+  // listener when the subscriber disconnects (tRPC aborts the signal).
+  onStateChange: publicProcedure.subscription(async function* ({ ctx, signal }) {
+    yield buildState(ctx.db);
+    for await (const _ of on(ctx.bus, "change", { signal })) {
+      yield buildState(ctx.db);
+    }
+  }),
+
   rentDone: publicProcedure.input(doneInput).mutation(({ ctx, input }) => {
     ctx.db.addEvent("rent_done", input?.at ?? Date.now());
+    ctx.bus.emit("change");
     return buildState(ctx.db);
   }),
 
   taxDone: publicProcedure.input(doneInput).mutation(({ ctx, input }) => {
     ctx.db.addEvent("tax_done", input?.at ?? Date.now());
+    ctx.bus.emit("change");
     return buildState(ctx.db);
   }),
 
@@ -37,12 +53,20 @@ export const appRouter = router({
     const current = ctx.db.getSettings<Settings>();
     if (!current) throw new Error("settings not initialised");
     ctx.db.putSettings({ ...current, ...input });
+    ctx.bus.emit("change");
     return buildState(ctx.db);
   }),
 
-  // HTTP sources refresh themselves on the scheduler; this just returns the
-  // latest assembled state (the inbox "sync" button's refresh).
-  sync: publicProcedure.mutation(({ ctx }) => buildState(ctx.db)),
+  // The inbox sync button: force a live JMAP fetch of every inbox, then return
+  // the freshly assembled state. Push (`Source.watch`) keeps counts current in
+  // the background, but this is the manual refresh — it actually re-reads
+  // Fastmail rather than just re-serving the DB. Single-flight + fault-isolated
+  // (see `syncInboxesOnce`), so a failing account still returns coherent state.
+  sync: publicProcedure.mutation(async ({ ctx }) => {
+    await syncInboxesOnce(ctx.db, ctx.inboxes, Date.now());
+    ctx.bus.emit("change");
+    return buildState(ctx.db);
+  }),
 
   // On-demand MoneyMoney sync (it is not scheduled). Single-flight: concurrent
   // callers coalesce into one osascript run. Fault-isolated — a locked / not-
@@ -50,6 +74,7 @@ export const appRouter = router({
   // still returns coherent state, so the card can surface it.
   syncBank: publicProcedure.mutation(async ({ ctx }) => {
     await syncBankOnce(ctx.db, ctx.bank, Date.now());
+    ctx.bus.emit("change");
     return buildState(ctx.db);
   }),
 });
