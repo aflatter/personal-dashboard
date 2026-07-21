@@ -404,15 +404,168 @@ as out of bounds while "privacy by reduction" is a design principle.
 
 ### Concrete next steps for the traditional path
 
-1. Promote the collector to a k8s deployment running JMAP + Toggl, backed by a
-   durable store (keep `node:sqlite`, or Postgres if we want room to grow).
-2. Add auth + TLS ingress in front of the collector (the N5 cost, unavoidable).
+1. Promote the collector to a k8s deployment running JMAP + Toggl, backed by the
+   existing `node:sqlite` store on a persistent volume.
+2. Put it behind **Tailscale** instead of a public ingress (see §7) — the tailnet
+   is the auth, so the N5 cost is paid with zero app-side credentials.
 3. Add a `pushBankBacklog` mutation; have the Mac Electron agent run the
-   MoneyMoney source and push on each collection.
-4. Have the Mac agent **subscribe** to the hub (reuse the existing SSE
-   transport) so it receives settings/threshold changes.
-5. Point the iPhone at the hub's SPA; it reads `state` and subscribes over SSE;
-   the `dashboard-cache-v2` cache covers the cold-load/offline gap.
+   MoneyMoney source (triggered locally) and push on each collection.
+4. Point the iPhone at the hub's SPA (installable PWA over `ts.net` HTTPS); it
+   reads `state` and subscribes for live updates; the `dashboard-cache-v2` cache
+   covers the cold-load/offline gap.
+
+The full deployment design is in **§7**.
+
+---
+
+## 7. Deployment architecture
+
+This section records the deployment design we settled on for the **traditional
+stack** (the §6 recommendation). It is private-by-construction: no public
+ingress, no app-side auth code, no CI runner, no standalone registry.
+
+### 7.1 Target topology — everything on the tailnet
+
+```
+                    ┌─── tailnet (WireGuard mesh, MagicDNS) ───┐
+                    │                                          │
+  [iPhone]──────────┤   https://collector.<tailnet>.ts.net    ├──────[MacBook]
+  Tailscale iOS     │              ▲         ▲                 │   Tailscale macOS
+  installable PWA   │              │ state   │ state           │   Electron app:
+  reads + subscribes│      ┌───────┴─────────┴───────┐         │   - main: MoneyMoney
+  (works when Mac   │      │  k3s: collector (pod)    │  push   │     agent (osascript),
+   is offline)      │      │  JMAP + Toggl + SQLite   │◄────────┼──   pushes backlog up
+                    │      │  + serves built SPA      │  (up)   │   - renderer: loads
+                    │      │  Tailscale operator      │         │     the PWA from backend
+                    │      │  exposes Service→tailnet │         │
+                    │      └──────────────────────────┘         │
+                    └──────────────────────────────────────────┘
+  No public ingress. Tailscale ACLs = auth. ts.net cert = valid HTTPS for the PWA.
+  Data flow is uniform: the Mac pushes up; every client reads down. No reverse channel.
+```
+
+### 7.2 The refresh rule (why there is no reverse channel)
+
+Collection triggers split by *where the data can physically be collected*:
+
+- **Cloud-collectable sources — JMAP, Toggl:** run always-on in k3s. The cloud
+  has the access, so these are **refreshable on demand from any device** through
+  the backend (e.g. the phone can still refresh the inbox).
+- **Mac-only source — MoneyMoney:** requires `osascript`/JXA under macOS TCC, so
+  it is collected by the Electron agent and **triggered at the Mac** (a local
+  button, and/or on launch/focus while MoneyMoney is unlocked). Other devices see
+  the **last-known** value, read-only.
+
+Because the only Mac-bound action is triggered locally, the agent is
+**push-only/outbound** — it never subscribes for commands. This deletes the
+bidirectional control path entirely. A local refresh still propagates everywhere:
+agent collects → `pushBankBacklog` → cloud updates snapshot/samples → cloud
+pushes new state to all subscribers (phone included). Only the *trigger* is
+Mac-local; the *value* still lands on the phone seconds later. When the Mac is
+offline, the phone simply shows the last-known backlog until the Mac returns.
+
+### 7.3 The Mac has two roles, one app
+
+The Electron app hosts both, cleanly separated:
+
+- **Main process = the agent.** Runs the MoneyMoney source with system access;
+  POSTs results to the collector over the tailnet. Push-only.
+- **Renderer = a thin PWA loader.** Loads the *same* SPA from the backend as the
+  phone (so the Mac UI auto-updates with every deploy) and subscribes to state
+  like any client. The only device-specific branch in the SPA: a preload bridge
+  (`window.dashboardAgent`) is present in Electron → the "refresh bank" control
+  is enabled and wired via IPC to the main process; absent on the phone → the
+  control is hidden. Everything else is identical across devices.
+
+The UI is optional (you could drop Electron and view the PWA in a browser); the
+**native agent is not** — MoneyMoney can only be collected by a native Mac
+process.
+
+### 7.4 Tailscale: the platform / app boundary
+
+Tailscale has two very different surfaces, split across the two repos:
+
+- **The ACL policy file is platform-level and cannot be sliced per-app.** It is a
+  single tailnet-wide document (tag declarations, `tagOwners`, grants); editing
+  it is the all-or-nothing `policy file` OAuth scope. It lives in the **infra
+  repo**.
+- **Exposure delegates through the operator, so the app repo holds *zero*
+  Tailscale credentials.** The infra repo installs the Tailscale K8s operator
+  once, with an OAuth client scoped to `devices:core` + `auth_keys` **restricted
+  to `tag:k8s-operator`**. The app then exposes the collector by writing a single
+  `tailscale.com/expose: "true"` annotation (or an Ingress) on its Service — the
+  operator, using *its* credential, provisions the tailnet device. No admin token
+  ever enters the app stack.
+
+The only cross-boundary coupling is one ACL grant ("my user devices may reach the
+collector's tag"), which can be a tag-*pattern* grant made once so future
+services need no further ACL edits.
+
+> **Caveat:** OAuth tag-restriction has live rough edges (tags dropped on client
+> creation; a minted token carrying all of the client's tags — tailscale/tailscale
+> #10702, #19945). Mitigation: **one OAuth client / auth key per consumer, each
+> with a single tag** — don't rely on tag-scoping to partition *within* a shared
+> client.
+
+### 7.5 Responsibility split
+
+| Concern | Infra / platform repo | App (personal-dashboard) repo |
+|---|:--:|:--:|
+| Tailscale ACL: tags, `tagOwners`, grants, autoApprovers | ✅ | — |
+| Tailnet toggles: MagicDNS + HTTPS certs (for the PWA) | ✅ | — |
+| Tailscale operator + its scoped OAuth client (1Password→Pulumi) | ✅ | — |
+| k3s storage class, the collector's PVC, backups | ✅ | declares a volume mount |
+| Namespace | ✅ | consumes via stack ref |
+| Collector `Deployment` / `Service` | — | ✅ |
+| `tailscale.com/expose` annotation on the Service | — | ✅ (no creds) |
+| App `Secret` (Fastmail + Toggl only), 1Password→Pulumi | — | ✅ |
+| `Dockerfile` + build/push to Forgejo | — | ✅ |
+| Collector serving built SPA static assets (reuse Electron-shell path) | — | ✅ |
+| PWA manifest + service worker | — | ✅ |
+| Electron agent: MoneyMoney push + local-trigger IPC | — | ✅ |
+
+The seam is a handful of **Pulumi stack references** the app reads from the
+platform (tailnet domain, approved tag, storage class, registry host). Secrets on
+both sides come from **1Password via Pulumi**, matching the existing infra setup.
+MoneyMoney's secret never enters the cluster — it stays on the Mac — which is
+consistent with the codebase's privacy-by-reduction principle.
+
+### 7.6 Build & release — no runner, no standalone registry
+
+- **Registry:** Forgejo's **built-in OCI registry** (public cert, so k3s/containerd
+  pulls it with just a standard `imagePullSecret` — no `registries.yaml` CA
+  wrangling). Using it as a registry needs **no Forgejo Actions runner** — that is
+  only for CI automation.
+- **Build:** a plain `Dockerfile` (`node:26-slim` + source + `pnpm install --prod`;
+  the app runs TypeScript via Node's runtime type-stripping, so there is no TS
+  build step — only the SPA's `vite build`). Built on the Mac with **OrbStack**,
+  using **`--platform linux/amd64`** because the cluster is x86_64 and the Mac is
+  arm64.
+- **Deploy:** a manual `just`/Make target — `build → push → pulumi up` — run by
+  hand. Deterministic, zero new services. (A Forgejo Actions runner is a later
+  nice-to-have; stakpak is an ops/debugging helper, not a release gate — it is an
+  AI DevOps agent, not a CI runner or a registry.)
+- **Nix option, deferred:** a `devenv`/`dockerTools` image would be more
+  reproducible but adds pnpm→Nix packaging friction; if adopted, build it on the
+  **Linux host** (native x86_64), never via the macOS QEMU `linux-builder`.
+
+### 7.7 The collector is a stateful singleton
+
+The collector holds a SQLite file **and** a long-lived JMAP push stream, so it is
+**one replica** with **`strategy: Recreate`** on a **ReadWriteOnce** volume — never
+two pods on the same DB file. Redeploys have a few seconds of downtime, covered by
+the phone's `dashboard-cache-v2` cache. (k3s persistence specifics — storage class,
+node affinity if multi-node, and backups — are owned by the infra agent and
+deferred; there is no critical data yet.) One app change is required regardless:
+the collector must **serve the built SPA static assets same-origin** in prod, which
+reuses the serving path already built for the Electron shell.
+
+### 7.8 Deferred / open items
+
+- k3s persistence details (storage class, node affinity, backups) — infra agent.
+- Operator vs. sidecar — **decided: operator** (app holds no Tailscale creds).
+- Whether Forgejo shares the k3s host (affects only build/push locality).
+- Nix-built container — deferred; plain Dockerfile first.
 
 ---
 
@@ -439,3 +592,21 @@ as out of bounds while "privacy by reduction" is a design principle.
   (no per-tool commentary), which lists tRPC under "State transfer" and its own
   camp under "Real-time and sync":
   [electric.ax/docs/sync/reference/alternatives](https://electric.ax/docs/sync/reference/alternatives)
+
+Deployment (§7):
+
+- Tailscale K8s operator — expose Services to the tailnet, not the public net:
+  [operator](https://tailscale.com/docs/kubernetes-operator),
+  [ingress](https://tailscale.com/docs/kubernetes-operator/ingress),
+  [install / OAuth client scopes + tags](https://tailscale.com/docs/kubernetes-operator/install-operator)
+- Tailscale OAuth clients — scopes, tag restriction, and the known rough edges:
+  [OAuth clients](https://tailscale.com/docs/features/oauth-clients),
+  [tag-restriction FR #10702](https://github.com/tailscale/tailscale/issues/10702),
+  [tags dropped on creation #19945](https://github.com/tailscale/tailscale/issues/19945)
+- Forgejo built-in container registry (no runner needed to use it):
+  [container registry](https://forgejo.org/docs/latest/user/packages/container/)
+- devenv containers + macOS needs a remote Linux builder:
+  [devenv containers](https://devenv.sh/containers/),
+  [nix-darwin linux-builder](https://nixcademy.com/posts/macos-linux-builder/)
+- stakpak — an open-source AI DevOps agent (not a CI runner / registry):
+  [stakpak/agent](https://github.com/stakpak/agent)
