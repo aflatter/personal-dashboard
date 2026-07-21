@@ -238,7 +238,13 @@ how the data layer evolved. Apply them when adding a source, a mutation, or stat
   scheduler's `jobs`; the bank card's ↺ button calls the `syncBank` tRPC
   mutation, which polls it once (the manual trigger is the opt-in, so the macOS
   Automation/TCC prompt happens only when the user asks — needs MoneyMoney
-  unlocked). The account to read is `MONEYMONEY_ACCOUNT` — a **required** secret,
+  unlocked). **Migration in progress:** `syncBank` runs MoneyMoney _in-process_
+  and only works when the backend runs on the Mac (the current Electron shell).
+  The target model is the Mac agent collecting locally and POSTing to the
+  backend's `pushBankBacklog` mutation (`backend/src/bank.ts`) — the backend
+  never polls MoneyMoney. `pushBankBacklog` already exists (the receive half);
+  `syncBank` is transitional and is removed once the agent + the bank source move
+  Mac-side. The account to read is `MONEYMONEY_ACCOUNT` — a **required** secret,
   IBAN preferred (unique and stable, unlike an account name, which MoneyMoney
   does not guarantee unique); there is no hardcoded default, so `bank` stays
   not-ready until it is configured. The card shows the last successful sync date
