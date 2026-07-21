@@ -9,14 +9,25 @@
 
 FROM node:26-slim AS build
 WORKDIR /app
-RUN corepack enable
+# ca-certificates: vp (Rust) initialises an HTTP client at startup and panics
+# without a system CA store — node:*-slim ships none. Node bundles its own roots,
+# so only this build stage needs them, not the runtime.
+# Node 26 no longer ships corepack (removed after its deprecation in 24), so
+# install the pinned pnpm directly — the version must track `packageManager`.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends ca-certificates \
+    && rm -rf /var/lib/apt/lists/* \
+    && npm install -g pnpm@11.5.3
 # Manifests first, for a cached install layer.
 COPY pnpm-workspace.yaml pnpm-lock.yaml package.json ./
 COPY packages/collector/package.json packages/collector/
 COPY packages/backend/package.json packages/backend/
 COPY packages/dashboard/package.json packages/dashboard/
 COPY packages/agent/package.json packages/agent/
-RUN pnpm install --frozen-lockfile
+# --ignore-scripts: the root `prepare` (vp config) is dev tooling that wants git
+# and a repo, neither of which belong in the image. It also skips secretspec's
+# native postinstall, which the container never needs — it reads secrets from env.
+RUN pnpm install --frozen-lockfile --ignore-scripts
 # Sources (see .dockerignore), then build the SPA.
 COPY . .
 RUN pnpm --filter @dash/dashboard build

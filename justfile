@@ -3,7 +3,7 @@
 # See deploy/README.md for the one-time secret setup and the confirm-items.
 
 registry := "forgejo.tev.im"
-owner := "personal" # TODO: confirm the Forgejo owner/org that holds the image
+owner := "aflatter"
 image := registry / owner / "personal-dashboard-backend"
 namespace := "personal-dashboard"
 url := "https://personal-dashboard.braid-stargazer.ts.net"

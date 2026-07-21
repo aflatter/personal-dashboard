@@ -68,8 +68,8 @@ certificate. With Tailscale **off**, the host must be unreachable.
 
 ## Confirm-items
 
-- **Forgejo owner/org** for the image path (`justfile` `owner`, default
-  `personal`) — set it to the real Forgejo namespace that holds the image.
+- ~~Forgejo owner/org for the image path~~ — resolved: `owner := "aflatter"`
+  (`justfile`), so images are `forgejo.tev.im/aflatter/personal-dashboard-backend`.
 - **Multi-node k3s?** If the cluster has more than one node, pin the pod with a
   `nodeSelector`/affinity so it always reschedules onto the node holding the
   `local-path` volume (single-node: no action needed).
