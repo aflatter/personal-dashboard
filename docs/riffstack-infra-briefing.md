@@ -15,9 +15,9 @@ of truth for the seam between the two repos.
 ## 1. Goal, in one paragraph
 
 A single-user "personal dashboard" runs an always-on backend service in the
-user's **k3s** cluster (x86*64, Linux). It must be reachable **privately** from
+user's **k3s** cluster (`x86_64`, Linux). It must be reachable **privately** from
 the user's **iPhone** (as an installable PWA) and **MacBook** over **Tailscale** —
-**no public ingress, no app-level auth.** The tailnet \_is* the authentication.
+**no public ingress, no app-level auth.** The tailnet **is** the authentication.
 Your job (Riffstack) is to provision the **platform layer** so the app repo can
 deploy its backend and have it reachable on the tailnet at a stable HTTPS
 `*.ts.net` name, **while the app repo holds zero Tailscale credentials.**
@@ -186,7 +186,7 @@ the user's Mac and never reaches the cluster at all.
 
 ## 6. Environment facts
 
-- Cluster: **k3s**, **x86_64**, Linux. Default StorageClass `local-path`.
+- Cluster: **k3s**, `x86_64`, Linux. Default StorageClass `local-path`.
 - Registry: **Forgejo** built-in OCI registry, **public cert**.
 - Clients: iPhone (Tailscale iOS app; installable PWA) + MacBook (Tailscale
   macOS; runs the local agent). Both are the user's own tailnet devices.
