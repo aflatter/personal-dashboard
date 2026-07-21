@@ -1,0 +1,20 @@
+# The Ingress backend. ClusterIP — never public; the Tailscale operator's Ingress
+# is the only path in. port 80 → the pod's named `http` port (no TLS in-pod; the
+# operator terminates TLS with the *.ts.net cert).
+apiVersion: v1
+kind: Service
+metadata:
+  name: dashboard-backend
+  namespace: personal-dashboard
+  labels:
+    app.kubernetes.io/name: personal-dashboard
+    app.kubernetes.io/component: backend
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: personal-dashboard
+    app.kubernetes.io/component: backend
+  ports:
+    - name: http
+      port: 80
+      targetPort: http

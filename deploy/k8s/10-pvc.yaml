@@ -1,0 +1,17 @@
+# Durable store for the backend's SQLite file. ReadWriteOnce + a single-replica
+# Recreate Deployment = never two pods on the same file. storageClass local-path
+# is node-local (no redundancy; backups deferred — no critical data yet).
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: dashboard-data
+  namespace: personal-dashboard
+  labels:
+    app.kubernetes.io/name: personal-dashboard
+    app.kubernetes.io/component: backend
+spec:
+  accessModes: ["ReadWriteOnce"]
+  storageClassName: local-path
+  resources:
+    requests:
+      storage: 1Gi

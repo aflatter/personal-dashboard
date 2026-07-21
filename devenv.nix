@@ -7,7 +7,11 @@
     pnpm.enable = true;
   };
 
-  packages = [ pkgs.secretspec ];
+  packages = [
+    pkgs.secretspec
+    pkgs.just # deploy workflow (justfile)
+    pkgs.kubectl # applying manifests / rollouts
+  ];
 
   enterShell = ''
     echo "personal-dashboard · node $(node --version) · pnpm $(pnpm --version)"

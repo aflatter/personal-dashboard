@@ -1,0 +1,23 @@
+# Tailscale-only exposure — no public ingress. The operator (installed by the
+# Riffstack platform) fulfils ingressClassName: tailscale, provisions a tailnet
+# node named `personal-dashboard`, tags it tag:svc-personal-dashboard (owned by
+# tag:k8s-operator in the ACL, which grants the user's devices → :443), and
+# terminates TLS with the *.ts.net cert. Result:
+#   https://personal-dashboard.braid-stargazer.ts.net
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: personal-dashboard
+  namespace: personal-dashboard
+  annotations:
+    tailscale.com/hostname: "personal-dashboard"
+    tailscale.com/tags: "tag:svc-personal-dashboard"
+spec:
+  ingressClassName: tailscale
+  defaultBackend:
+    service:
+      name: dashboard-backend
+      port:
+        number: 80
+  tls:
+    - hosts: ["personal-dashboard"]

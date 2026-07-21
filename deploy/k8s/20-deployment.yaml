@@ -1,0 +1,72 @@
+# The always-on backend: JMAP + Toggl collection, tRPC API, and the built SPA
+# served same-origin. Single stateful pod (SQLite file + a long-lived JMAP push
+# stream), so exactly one replica with the Recreate strategy — never two pods on
+# the PVC. A few seconds of downtime on redeploy is covered by the SPA's cache.
+# `image` is a placeholder tag; `just deploy` sets it to the pushed git-sha image.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: dashboard-backend
+  namespace: personal-dashboard
+  labels:
+    app.kubernetes.io/name: personal-dashboard
+    app.kubernetes.io/component: backend
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: personal-dashboard
+      app.kubernetes.io/component: backend
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: personal-dashboard
+        app.kubernetes.io/component: backend
+    spec:
+      imagePullSecrets:
+        - name: forgejo-registry
+      containers:
+        - name: backend
+          image: forgejo.tev.im/personal/personal-dashboard-backend:latest
+          ports:
+            - name: http
+              containerPort: 4319
+          envFrom:
+            - secretRef:
+                name: dashboard-secrets # FASTMAIL_* / TOGGL_* (from 1Password)
+          env:
+            - name: COLLECTOR_HOST
+              value: "0.0.0.0" # bind the pod network, not just loopback
+            - name: COLLECTOR_PORT
+              value: "4319"
+            - name: COLLECTOR_DB
+              value: /data/collector.db
+            - name: DASHBOARD_DIST
+              value: /app/packages/dashboard/dist
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 3
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 20
+          resources:
+            requests:
+              cpu: 50m
+              memory: 96Mi
+            limits:
+              memory: 256Mi
+          volumeMounts:
+            - name: data
+              mountPath: /data
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: dashboard-data

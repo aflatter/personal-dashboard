@@ -1,0 +1,19 @@
+# Reinstalled / rebuilt inside the image
+node_modules
+**/node_modules
+packages/*/dist
+
+# Not part of the backend image
+apps/desktop-electron
+docs
+
+# Local state / tooling
+.git
+.devenv
+.direnv
+*.db
+packages/*/*.db
+.claude
+deploy
+Dockerfile
+.dockerignore

@@ -1,0 +1,8 @@
+# App-created namespace, carrying the tenant labels Riffstack conventions expect.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: personal-dashboard
+  labels:
+    tenant: personal
+    app.kubernetes.io/name: personal-dashboard
