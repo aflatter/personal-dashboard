@@ -76,6 +76,14 @@ certificate. With Tailscale **off**, the host must be unreachable.
 
 ## Notes
 
+- **Registry linking**: the image carries
+  `org.opencontainers.image.source=https://forgejo.tev.im/aflatter/personal-dashboard`,
+  which associates the pushed package with the repo in Forgejo (the image name
+  doesn't match the repo name, so the naming convention wouldn't auto-link it).
+  Forgejo links on **first creation of the package only** — if a package ever
+  gets created unlinked, delete it in Forgejo and push again. `just build` also
+  stamps `org.opencontainers.image.revision` with the git SHA.
+
 - **Bank data**: the deployed backend never runs MoneyMoney (Linux/x86_64). The
   bank card shows the last value pushed by the Mac agent via `pushBankBacklog`,
   or the seeded value until the agent is wired. Inboxes, Toggl, rent/tax work

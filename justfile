@@ -15,7 +15,7 @@ default:
 
 # Build the linux/amd64 image (arm Mac → x86_64 k3s, so the platform is explicit).
 build:
-    docker build --platform linux/amd64 -t {{image}}:{{tag}} .
+    docker build --platform linux/amd64 --build-arg GIT_SHA={{tag}} -t {{image}}:{{tag}} .
 
 # Push the built image to Forgejo (run `docker login {{registry}}` once first).
 push: build

@@ -45,4 +45,16 @@ ENV COLLECTOR_HOST=0.0.0.0 \
     DASHBOARD_DIST=/app/packages/dashboard/dist
 EXPOSE 4319
 VOLUME ["/data"]
+
+# Associates the pushed package with the Forgejo repo. The image name
+# (personal-dashboard-backend) doesn't match the repo name, so the naming
+# convention wouldn't auto-link it — this label is what does. Forgejo links on
+# FIRST creation of the package only; re-pushing an already-created package will
+# not re-link it. Labels sit last so a new GIT_SHA doesn't bust the COPY layer.
+ARG GIT_SHA=unknown
+LABEL org.opencontainers.image.source="https://forgejo.tev.im/aflatter/personal-dashboard" \
+      org.opencontainers.image.title="personal-dashboard-backend" \
+      org.opencontainers.image.description="Always-on backend: JMAP + Toggl collection, tRPC API, and the dashboard SPA served same-origin." \
+      org.opencontainers.image.revision="${GIT_SHA}"
+
 CMD ["node", "packages/backend/src/main.ts"]
