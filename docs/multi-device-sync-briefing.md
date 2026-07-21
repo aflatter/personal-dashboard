@@ -569,6 +569,81 @@ reuses the serving path already built for the Electron shell.
 
 ---
 
+## 8. Module structure
+
+The deployment split (backend vs. Mac agent) forces a module split, because
+otherwise the agent bundles the whole backend just to run one source. This
+section records the target package layout.
+
+### 8.1 The problem with today's `collector`
+
+`@dash/collector` currently fuses two concerns under one name:
+
+1. **Acquisition** — source adapters (`sources/`), `registry`, the `Source` port,
+   `contract` types. *"Fetch data from external systems."* Genuinely **shared**:
+   the backend embeds JMAP + Toggl, the Mac agent embeds MoneyMoney.
+2. **Serving** — store, state assembly, sampling, scheduler, tRPC router, SSE,
+   and (new in prod) serving the built SPA. **Backend-only**, and the part that
+   mis-fits the name — a *collector* should not serve a frontend.
+
+The Electron agent must **not** bundle the serving half. Today, importing
+`@dash/collector` for MoneyMoney drags in the SQLite store, the tRPC server, and
+the scheduler. Splitting keeps the agent lean — it isn't cosmetic.
+
+### 8.2 Target packages
+
+| Package | Role | Depends on |
+|---|---|---|
+| `@dash/collector` | **Acquisition library.** Source adapters + `Source` port + `registry` + `contract` types + `secrets`. No HTTP, no store, no server. | — |
+| `@dash/backend` | **The backend deployable.** Store, state assembly, sampling, scheduler, tRPC router, SSE, serves the built SPA, handles `pushBankBacklog`. This is the thing that serves a frontend. | `@dash/collector` |
+| `@dash/dashboard` | The SPA (unchanged). Served by `@dash/backend` in prod; loaded from the backend in Electron. | `@dash/backend` (types only, via `AppRouter`) |
+| Mac agent | Composes a collector with **only** MoneyMoney + a push client. Lives in the Electron main process (promote to `@dash/agent` only if it earns its own tests). | `@dash/collector`, `@dash/backend` (types only) |
+
+So `collector` keeps its name, scoped to what it actually does — it collects. The
+backend gets its own honest name.
+
+> **Terminology note:** §§1–7 call the always-on service "the collector" — its
+> name in the app today. Post-split, that running deployable is `@dash/backend`,
+> which *embeds* `@dash/collector` (JMAP + Toggl) for acquisition. Read "the
+> collector (pod)" in §7 as "the backend."
+
+### 8.3 What moves where (from today's `collector/`)
+
+| Stays in `@dash/collector` (acquire) | Moves to `@dash/backend` (serve) |
+|---|---|
+| `sources/` (jmap, moneymoney, toggl) | `store/db.ts` |
+| `registry.ts` | `state.ts`, `seed.ts`, `sampling/` |
+| `contract.ts` (shared types) | `router.ts`, `trpc.ts`, `sources/sse.ts` |
+| `secrets.ts`, `sources/port.ts`, the `Source` port | `scheduler.ts`, `main.ts` |
+|  | + new: static SPA serving, `pushBankBacklog` |
+
+Two migrations encode the underlying principle — **`collector` owns *mechanism*
+(how to fetch a source); the caller owns *policy* (when to fetch):**
+
+- **`scheduler.ts` → `@dash/backend`.** The backend polls on a schedule; the Mac
+  agent's **local trigger** replaces the scheduler on the Mac side. Same sources,
+  different policy — so policy leaves the shared library.
+- **`sync.ts` (single-flight bank sync) → the agent.** On-demand MoneyMoney now
+  happens Mac-side; the backend only receives the push.
+
+### 8.4 Dependency graph (a DAG, no cycles)
+
+```
+contract/types ─┬─► @dash/collector ─► @dash/backend ─┬─► @dash/dashboard (type-only client)
+                │                                      └─► Mac agent (type-only push client)
+                └─► (agent also embeds @dash/collector for the MoneyMoney source)
+```
+
+Both the dashboard and the agent are just **tRPC clients** of the backend — the
+dashboard reads state, the agent pushes bank data. This is symmetric and already
+how the dashboard works today.
+
+This split is really just **promoting the existing lint-enforced `sources/`
+boundary up to a package boundary** — the same isolation discipline, now enforced
+by the module graph instead of a lint rule.
+
+---
+
 ## Sources
 
 - ElectricSQL — read-path sync, Shapes, write path via your own API:
