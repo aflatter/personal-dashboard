@@ -214,22 +214,52 @@ Fit notes: capable and robust offline-first, good native-iPhone story. But it is
 the **most infrastructure** of any option for a single-user app, and — like
 Electric — you still run a write backend.
 
-### 3.5 The rest of the landscape (from Electric's "alternatives")
+### 3.5 The rest of the landscape (Electric's own alternatives list)
 
-Grouped by why they do or don't fit us:
+Electric's [alternatives page](https://electric.ax/docs/sync/reference/alternatives)
+is not an editorial comparison — it is a **categorized link directory** of ~90
+projects with no per-tool commentary. What's useful is the *taxonomy* it sorts
+them into, because it maps cleanly onto our decision:
+
+| Electric's category | Examples it lists | Relevance to us |
+|---|---|---|
+| **Real-time and sync** | Ably, Convex, Debezium, Firebase, Litestream, Liveblocks, PartyKit, PowerSync, Sequin, SQLedge, SQLSync, Supabase Realtime, **Turso**, Y-Sweet | The sync-engine option — Electric's own camp. |
+| **Embedded databases** | **PGlite**, CozoDB, DuckDB, **libSQL**, **SQLite**, Tonbo | The client-side store. We already use SQLite; PGlite is Electric's wasm-Postgres client store. |
+| **Local-first** | Automerge, Ditto, DXOS, Evolu, Fireproof, InstantDB, Jazz, LiveStore, Pocketbase, Pouch, Replicache, RxDB, Triplit, TinyBase, Verdant, cr-sqlite, Watermelon, Yjs, **Zero** | Full frameworks; mostly CRDT/collab-shaped. |
+| **State transfer** | Apollo (GraphQL), Relay (GraphQL), **tRPC** | **This is our current stack.** |
+| **Postgres APIs** | Hasura, PostGraphile, PostgREST | Auto-generated read/write APIs over Postgres. |
+
+**The single most useful thing on that page:** Electric lists **tRPC** — the exact
+thing our collector already uses — under *"State transfer,"* a sibling category to
+its own *"Real-time and sync."* So the page frames the decision precisely the way
+this briefing does: **do we stay in "state transfer" (request/response over a
+typed contract — what we have) or move to "real-time and sync"?** Electric isn't
+claiming tRPC is wrong; it's naming it as the adjacent category you'd be leaving.
+
+Reading the ~90 projects by whether they fit *us*:
 
 - **CRDT / collaboration frameworks — Yjs, Automerge, Liveblocks, Y-Sweet,
-  Jazz, DXOS, Ditto:** built for concurrent multi-writer editing (shared docs,
-  cursors, merges). They solve the conflict problem we don't have. **Mismatch.**
+  Jazz, DXOS, Ditto, Evolu, Verdant, Fireproof:** built for concurrent
+  multi-writer editing (shared docs, cursors, merges). They solve the conflict
+  problem we don't have. **Mismatch.**
 - **Local-first DBs / sync frameworks — Replicache, RxDB, WatermelonDB,
-  LiveStore, Triplit, SQLSync, cr-sqlite:** varying takes on client DB + sync.
-  Replicache/Zero share lineage; RxDB/WatermelonDB are client-DB + pluggable
-  sync; Triplit is a full sync-DB. All viable in principle but either
+  LiveStore, Triplit, TinyBase, SQLSync, cr-sqlite:** varying takes on client DB
+  + sync. Replicache/Zero share lineage; RxDB/WatermelonDB are client-DB +
+  pluggable sync; Triplit is a full sync-DB. All viable in principle but either
   general-purpose overkill or require rebuilding on their data model. **Possible
   but not compelling** given N3/N4.
 - **Hosted sync backends — Convex, InstantDB, Firebase/Firestore, Supabase
   Realtime:** turnkey, but your data lives in **their** cloud. Direct tension
   with **N2 (privacy by reduction)**. **Avoid** unless self-hostable in our k8s.
+- **SQLite streaming — Litestream, SQLedge, rqlite, Dqlite:** a genuinely
+  lighter middle-ground worth knowing about. Litestream streams a SQLite file
+  to object storage for replication/DR; it fits our `node:sqlite` store. But it
+  is **one-way** (primary → replica), so it does *not* solve the Mac→cloud
+  **upload** arrow on its own — it can't be the hub for MoneyMoney data. Useful
+  for backup/read-replicas, not as the sync backbone.
+- **Postgres read/write APIs — Hasura, PostGraphile, PostgREST:** if we ever
+  move to Postgres, these auto-generate the CRUD API — an alternative to
+  hand-writing tRPC procedures, orthogonal to the sync question.
 
 ---
 
@@ -405,5 +435,7 @@ as out of bounds while "privacy by reduction" is a design principle.
   [philosophy](https://docs.powersync.com/overview/powersync-philosophy),
   [custom conflict resolution](https://docs.powersync.com/usage/lifecycle-maintenance/handling-update-conflicts/custom-conflict-resolution),
   [v1.0 intro](https://powersync.com/blog/introducing-powersync-v1-0-postgres-sqlite-sync-layer)
-- Electric's own comparison of alternatives (referenced by the prompt):
-  `https://electric.ax/docs/sync/reference/alternatives`
+- Electric's alternatives page — a categorized link directory of ~90 projects
+  (no per-tool commentary), which lists tRPC under "State transfer" and its own
+  camp under "Real-time and sync":
+  [electric.ax/docs/sync/reference/alternatives](https://electric.ax/docs/sync/reference/alternatives)
