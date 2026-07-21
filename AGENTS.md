@@ -81,9 +81,15 @@ packages/
                  owns day-bucketed history + durable state in node:sqlite; serves
                  a tRPC API on 127.0.0.1 (loopback).
                  src/: trpc, router (the API), store/db, seed, state, scheduler,
-                 sync (on-demand bank sync), backend (createBackend factory),
-                 main (thin bin).
+                 bank (pushBankBacklog receiver), sync (transitional in-process
+                 bank sync), backend (createBackend factory), main (thin bin).
                  Exports: `.` → AppRouter type · `./backend` → createBackend.
+  agent/         The Mac push agent (Node library; runs in the Electron main
+                 process). Embeds @dash/collector for the MoneyMoney source, and
+                 pushes to the backend's pushBankBacklog via a typed tRPC client.
+                 Push-only — no store, no server. src/: bank-agent (single-flight
+                 collect→push core), collect (MoneyMoney via buildBankSource),
+                 push (tRPC client). The Electron shell wires `refresh` to IPC.
   dashboard/     The SPA (Vite + React) — a typed tRPC client over the backend.
     src/
       domain/        Pure TS — NO React, NO colors/strings. Derivations (inbox,
