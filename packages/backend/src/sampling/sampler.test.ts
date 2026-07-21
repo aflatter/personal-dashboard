@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { Db } from "../store/db.ts";
-import { localDay } from "../time.ts";
-import type { Source } from "../sources/port.ts";
+import { localDay } from "@dash/collector/time";
+import type { Source } from "@dash/collector/sources/port";
 import { commit, pollOnce } from "./sampler.ts";
 
 const NOW = new Date(2026, 5, 24, 12, 0, 0).getTime();

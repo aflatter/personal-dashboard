@@ -1,5 +1,4 @@
 import type { InboxAccount, SourceId } from "./contract.ts";
-import type { Job } from "./scheduler.ts";
 import type { Secrets } from "./secrets.ts";
 import { jmapInbox } from "./sources/jmap.ts";
 import { moneyMoneyBank } from "./sources/moneymoney.ts";
@@ -8,6 +7,18 @@ import { togglHours } from "./sources/toggl.ts";
 
 const MIN = 60_000;
 const DAY = 24 * 60 * MIN;
+
+/**
+ * A source paired with its polling cadence — the registry's output. The cadence
+ * is source configuration (defined here, next to the source), while *running* the
+ * loop is the engine's job: the backend's scheduler consumes these. Defining `Job`
+ * on the acquisition side (rather than in the scheduler) keeps the dependency
+ * direction one-way — the engine knows the sources; never the reverse.
+ */
+export interface Job {
+  source: Source;
+  everyMs: number;
+}
 
 /**
  * The registry is the single place that reads the whole `Secrets` bag and turns

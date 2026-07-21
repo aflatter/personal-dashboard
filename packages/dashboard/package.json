@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "@base-ui/react": "^1.6.0",
+    "@dash/backend": "workspace:*",
     "@dash/collector": "workspace:*",
     "@trpc/client": "^11.0.0",
     "react": "^19.2.7",

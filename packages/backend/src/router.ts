@@ -1,5 +1,5 @@
 import { z } from "zod";
-import type { Settings } from "./contract.ts";
+import type { Settings } from "@dash/collector/contract";
 import { syncBankOnce } from "./sync.ts";
 import { buildState } from "./state.ts";
 import { publicProcedure, router } from "./trpc.ts";

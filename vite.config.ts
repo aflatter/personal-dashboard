@@ -9,9 +9,9 @@ export default defineConfig({
   lint: {
     // Boundary rule (dependency direction, lint-enforced — see AGENTS.md):
     // collector sources are leaf modules so they stay independently importable
-    // (e.g. by a future push agent). The engine knows the sources; never the
-    // reverse. The registry (collector/src/registry.ts, engine-side) is the
-    // only reader of the whole Secrets bag.
+    // (e.g. by the Mac push agent). The engine (@dash/backend) knows the sources;
+    // never the reverse. The registry (@dash/collector, registry.ts) is the only
+    // reader of the whole Secrets bag.
     overrides: [
       {
         files: ["**/collector/src/sources/**"],
@@ -27,9 +27,11 @@ export default defineConfig({
                     "!../contract.ts",
                     "@dash/collector",
                     "@dash/collector/**",
+                    "@dash/backend",
+                    "@dash/backend/**",
                   ],
                   message:
-                    "sources are leaf modules: node builtins, sources/* siblings, time.ts, and contract types only — never the engine",
+                    "sources are leaf modules: node builtins, sources/* siblings, time.ts, and contract types only — never the engine (@dash/backend)",
                 },
               ],
             },

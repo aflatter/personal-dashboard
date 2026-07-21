@@ -1,11 +1,6 @@
+import type { Job } from "@dash/collector/registry";
 import { pollOnce } from "./sampling/sampler.ts";
-import type { Source } from "./sources/port.ts";
 import type { Db } from "./store/db.ts";
-
-export interface Job {
-  source: Source;
-  everyMs: number;
-}
 
 /**
  * Start per-source polling loops. Each source runs on its own cadence and is

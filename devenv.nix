@@ -13,19 +13,19 @@
     echo "personal-dashboard · node $(node --version) · pnpm $(pnpm --version)"
   '';
 
-  # The collector loads its own secrets in-process (secretspec SDK). Ports are
+  # The backend loads its own secrets in-process (secretspec SDK). Ports are
   # allocated from a base (a free port is found upward from it) so parallel git
-  # worktrees don't collide. The dashboard waits for the collector's readiness
+  # worktrees don't collide. The dashboard waits for the backend's readiness
   # probe before starting; running just the dashboard task
-  # (`devenv tasks run devenv:processes:dashboard`) pulls the collector in via
+  # (`devenv tasks run devenv:processes:dashboard`) pulls the backend in via
   # that dependency. MoneyMoney is not polled here — it syncs on-demand via the
-  # bank card's ↺ button (the collector's `syncBank` mutation).
-  processes.collector = {
-    exec = "COLLECTOR_PORT=${toString config.processes.collector.ports.http.value} node packages/collector/src/main.ts";
+  # bank card's ↺ button (the backend's `syncBank` mutation).
+  processes.backend = {
+    exec = "COLLECTOR_PORT=${toString config.processes.backend.ports.http.value} node packages/backend/src/main.ts";
     ports.http.allocate = 4319;
     ready = {
       http.get = {
-        port = config.processes.collector.ports.http.value;
+        port = config.processes.backend.ports.http.value;
         path = "/health";
       };
       initial_delay = 2;
@@ -36,12 +36,12 @@
 
   processes.dashboard = {
     exec = ''
-      COLLECTOR_URL="http://127.0.0.1:${toString config.processes.collector.ports.http.value}" \
+      COLLECTOR_URL="http://127.0.0.1:${toString config.processes.backend.ports.http.value}" \
       PORT="''${PORT:-${toString config.processes.dashboard.ports.http.value}}" \
       pnpm --filter @dash/dashboard dev
     '';
     ports.http.allocate = 5173;
-    after = [ "devenv:processes:collector@ready" ];
+    after = [ "devenv:processes:backend@ready" ];
     ready = {
       http.get = {
         port = config.processes.dashboard.ports.http.value;

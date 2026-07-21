@@ -24,7 +24,7 @@ import type { BrowserWindow as BrowserWindowType } from "electron";
 import { readFile, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import type { AppRouter } from "../../../packages/collector/src/index.ts";
+import type { AppRouter } from "../../../packages/backend/src/index.ts";
 import { startCollectorHost } from "./collector-host.ts";
 import type { CollectorHost } from "./collector-host.ts";
 

@@ -1,6 +1,6 @@
-import type { Source, Poll } from "../sources/port.ts";
+import type { Source, Poll } from "@dash/collector/sources/port";
 import type { Db } from "../store/db.ts";
-import { localDay } from "../time.ts";
+import { localDay } from "@dash/collector/time";
 
 /**
  * Persist one poll: upsert today's day-bucket for each history metric (idempotent —

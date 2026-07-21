@@ -1,5 +1,5 @@
 import { initTRPC } from "@trpc/server";
-import type { BankGate } from "./registry.ts";
+import type { BankGate } from "@dash/collector/registry";
 import type { Db } from "./store/db.ts";
 
 /**

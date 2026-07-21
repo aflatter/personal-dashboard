@@ -12,13 +12,17 @@
       "types": "./src/contract.ts",
       "default": "./src/contract.ts"
     },
-    "./collector": {
-      "types": "./src/collector.ts",
-      "default": "./src/collector.ts"
+    "./registry": {
+      "types": "./src/registry.ts",
+      "default": "./src/registry.ts"
     },
     "./secrets": {
       "types": "./src/secrets.ts",
       "default": "./src/secrets.ts"
+    },
+    "./time": {
+      "types": "./src/time.ts",
+      "default": "./src/time.ts"
     },
     "./sources/port": {
       "types": "./src/sources/port.ts",
@@ -38,14 +42,11 @@
     }
   },
   "scripts": {
-    "start": "node src/main.ts",
     "test": "vp test",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@trpc/server": "^11.0.0",
-    "secretspec": "^0.13.0",
-    "zod": "^3.24.0"
+    "secretspec": "^0.13.0"
   },
   "devDependencies": {
     "@types/node": "^24.7.0",

@@ -41,14 +41,14 @@ pnpm dev          # vp dev  — http://localhost:5173
 
 ### Scripts
 
-| Script              | What it does                          |
-| ------------------- | ------------------------------------- |
-| `pnpm dev`          | `vp dev` — dev server                 |
-| `pnpm build`        | `vp build` — production build         |
-| `pnpm preview`      | `vp preview` — serve the build        |
-| `pnpm test`         | `vp test` — domain unit tests (Vitest)|
-| `pnpm lint`         | `vp lint` — oxlint                     |
-| `pnpm typecheck`    | `tsc --noEmit`                         |
+| Script           | What it does                           |
+| ---------------- | -------------------------------------- |
+| `pnpm dev`       | `vp dev` — dev server                  |
+| `pnpm build`     | `vp build` — production build          |
+| `pnpm preview`   | `vp preview` — serve the build         |
+| `pnpm test`      | `vp test` — domain unit tests (Vitest) |
+| `pnpm lint`      | `vp lint` — oxlint                     |
+| `pnpm typecheck` | `tsc --noEmit`                         |
 
 ## Architecture
 

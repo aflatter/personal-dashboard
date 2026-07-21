@@ -1,4 +1,4 @@
-import type { BankGate } from "./registry.ts";
+import type { BankGate } from "@dash/collector/registry";
 import { pollOnce } from "./sampling/sampler.ts";
 import type { Db } from "./store/db.ts";
 

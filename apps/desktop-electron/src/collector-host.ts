@@ -3,9 +3,9 @@
 // The whole point of Electron over Tauri: the main process IS Node, so we run
 // the collector on Electron's bundled Node (24.x) instead of shipping a separate
 // Node runtime as a sidecar. Composition comes from the collector's own
-// createCollector() factory — statically imported (typed), no re-wiring of
-// collector internals. Electron's Node type-strips the collector's .ts sources
-// directly, and their deps resolve from the collector's own node_modules.
+// createBackend() factory — statically imported (typed), no re-wiring of
+// backend internals. Electron's Node type-strips the backend's .ts sources
+// directly, and their deps resolve from the workspace's node_modules.
 //
 // What this host adds around the factory's handler: static serving of the SPA
 // build and an /api mount, so the renderer loads http://127.0.0.1:<port>/ and
@@ -20,7 +20,7 @@ import { createServer } from "node:http";
 import type { ServerResponse } from "node:http";
 import { readFile, stat } from "node:fs/promises";
 import { extname, join, normalize } from "node:path";
-import { createCollector } from "../../../packages/collector/src/collector.ts";
+import { createBackend } from "../../../packages/backend/src/backend.ts";
 import { loadSecrets } from "../../../packages/collector/src/secrets.ts";
 
 const MIME: Record<string, string> = {
@@ -72,7 +72,7 @@ export interface CollectorHostOptions {
 export async function startCollectorHost(opts: CollectorHostOptions): Promise<CollectorHost> {
   const { host = "127.0.0.1", port = 4390, dbPath, distDir } = opts;
 
-  const { handler } = createCollector({ dbPath, secrets: loadSecrets() });
+  const { handler } = createBackend({ dbPath, secrets: loadSecrets() });
 
   const server = createServer((req, res) => {
     const url = req.url ?? "/";

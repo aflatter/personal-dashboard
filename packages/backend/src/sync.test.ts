@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import type { BankGate } from "./registry.ts";
-import type { Poll, Source } from "./sources/port.ts";
+import type { BankGate } from "@dash/collector/registry";
+import type { Poll, Source } from "@dash/collector/sources/port";
 import { Db } from "./store/db.ts";
 import { syncBankOnce } from "./sync.ts";
 

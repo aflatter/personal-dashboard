@@ -94,17 +94,17 @@ async function run(): Promise<void> {
     };
   });
 
-  // --- 3. TypeScript: import the collector's .ts source directly -------------
-  // Exercises type-stripping AND node:sqlite AND collector reuse: db.ts is
+  // --- 3. TypeScript: import the backend's .ts source directly ---------------
+  // Exercises type-stripping AND node:sqlite AND package reuse: db.ts is
   // TypeScript and imports node:sqlite at module top.
-  const dbTsUrl = pathToFileURL(resolve(repoRoot, "packages/collector/src/store/db.ts")).href;
+  const dbTsUrl = pathToFileURL(resolve(repoRoot, "packages/backend/src/store/db.ts")).href;
   await recordAsync("ts-strip-direct-import", async () => {
     const { Db } = await import(dbTsUrl);
     const db = new Db(":memory:");
     const empty = db.isEmpty();
     db.putSettings({ hello: "welt" });
     return {
-      imported: "packages/collector/src/store/db.ts",
+      imported: "packages/backend/src/store/db.ts",
       isEmpty: empty,
       settings: db.getSettings(),
     };

@@ -1,6 +1,12 @@
-import type { BankState, Client, InboxAccount, MailProtocol, Settings } from "./contract.ts";
+import type {
+  BankState,
+  Client,
+  InboxAccount,
+  MailProtocol,
+  Settings,
+} from "@dash/collector/contract";
 import type { Db } from "./store/db.ts";
-import { DAY, localDay } from "./time.ts";
+import { DAY, localDay } from "@dash/collector/time";
 
 /** Non-history part of an inbox, stored in the snapshot row. */
 export interface InboxSnapshot {

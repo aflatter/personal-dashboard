@@ -46,7 +46,7 @@ reach into the parent checkout.
 
 | Command          | What it does                                       |
 | ---------------- | -------------------------------------------------- |
-| `devenv up`      | collector (`:4319`) + dashboard (`:5173`) together |
+| `devenv up`      | backend (`:4319`) + dashboard (`:5173`) together   |
 | `pnpm dev`       | `vp dev packages/dashboard` — SPA dev server       |
 | `pnpm build`     | `vp build packages/dashboard` — production build   |
 | `pnpm test`      | `vp run -r test` — Vitest across packages          |
@@ -58,24 +58,33 @@ Before handing back changes, ensure `pnpm typecheck`, `pnpm lint`, and
 
 ## Architecture — keep these boundaries
 
-A pnpm workspace: the **collector** service owns data and exposes a **tRPC**
-API; the **dashboard** SPA is a typed tRPC client. There is no shared types
-package — the collector's `AppRouter` _is_ the contract, and the SPA infers its
-types from it (type-only import; no collector code is bundled).
+A pnpm workspace with two service-side packages split by role: **`collector`**
+is the acquisition library (source adapters + registry + the data-shape
+contract — no store, no server; embeddable), and **`backend`** is the always-on
+service that embeds it, owns durable state, and exposes a **tRPC** API. The
+**dashboard** SPA is a typed tRPC client. There is no shared types package — the
+backend's `AppRouter` _is_ the contract, and the SPA infers its types from it
+(type-only import; no backend code is bundled). The split exists so the Mac push
+agent can embed `collector` (one source) without dragging in the backend.
 
 ```
 packages/
-  collector/     Node service (Node 26 runs .ts directly — no build). Owns
-                 acquisition, day-bucketed history, and durable state in
-                 node:sqlite; serves a tRPC API on 127.0.0.1 (loopback).
-                 src/: contract (data types), trpc, router (the API), store/db,
-                 seed, state, sources/ (leaf adapters), registry (Secrets →
-                 configured sources), sync (on-demand bank sync), collector
-                 (createCollector factory), main (thin bin).
-                 Exports: `.` → AppRouter type · `./contract` → data types ·
-                 `./collector` → createCollector · `./secrets` → loader ·
-                 `./sources/{port,jmap,moneymoney,toggl}` → standalone sources.
-  dashboard/     The SPA (Vite + React) — a typed tRPC client over the collector.
+  collector/     Acquisition library (no HTTP, no store). Shared by the backend
+                 and the Mac agent. Node 26 runs .ts directly — no build.
+                 src/: contract (data types), secrets (loader), time,
+                 registry (Secrets → configured sources + Job/BankGate),
+                 sources/ (leaf adapters).
+                 Exports: `.` → acquisition barrel · `./contract` → data types ·
+                 `./registry` → source wiring · `./secrets` → loader ·
+                 `./time` · `./sources/{port,jmap,moneymoney,toggl}`.
+  backend/       The always-on service (Node 26, .ts direct). Embeds @dash/collector;
+                 owns day-bucketed history + durable state in node:sqlite; serves
+                 a tRPC API on 127.0.0.1 (loopback).
+                 src/: trpc, router (the API), store/db, seed, state, scheduler,
+                 sync (on-demand bank sync), backend (createBackend factory),
+                 main (thin bin).
+                 Exports: `.` → AppRouter type · `./backend` → createBackend.
+  dashboard/     The SPA (Vite + React) — a typed tRPC client over the backend.
     src/
       domain/        Pure TS — NO React, NO colors/strings. Derivations (inbox,
                      counter, rent, tax, bank, hours) return semantic/numeric
@@ -84,14 +93,14 @@ packages/
                      palette (lighten/clientTint). NO React, no domain logic.
       api/           trpc.ts (typed client) + client.ts (maps procedure results
                      to domain shapes).
-      store/         useDashboard: fetch + poll the collector, run mutations,
+      store/         useDashboard: fetch + poll the backend, run mutations,
                      cache to localStorage. Exposed via DashboardContext.
       components/
         ui/          Presentational ONLY — props in, no store, no derivations.
         *.tsx        Container cards: read the store, call domain fns, render ui/.
 ```
 
-New API surface? Add a procedure to `collector/src/router.ts`; the SPA's typed
+New API surface? Add a procedure to `backend/src/router.ts`; the SPA's typed
 client picks it up automatically — never hand-write request/response types.
 
 Rules:
@@ -106,20 +115,20 @@ Rules:
   then hand plain props to `ui/*`.
 - **Domain logic is pure and lives in `dashboard/src/domain`** — add new
   derivations there with a colocated `*.test.ts`, not inside components.
-- **The collector is the source of truth.** The SPA never owns data; it calls
+- **The backend is the source of truth.** The SPA never owns data; it calls
   tRPC procedures (`state` query; `rentDone`/`taxDone`/`settings`/`sync`
   mutations, all returning fresh state). `localStorage` is only a render cache.
 - **Collector sources are leaf modules** (the fourth dependency-direction rule,
   lint-enforced via `no-restricted-imports` in the root `vite.config.ts`): a
   file under `collector/src/sources/` imports only Node builtins, `sources/*`
-  siblings, `time.ts`, and contract _types_ — never the engine (store, sampling,
-  scheduler, trpc, router) and never the secrets loader. Each source factory
-  takes its **narrow config** and closes over it (`poll()` takes no arguments;
-  constructors do no I/O); `src/registry.ts` — engine-side, deliberately not
-  under `sources/` — is the **only** reader of the whole `Secrets` bag and the
-  only place that gates ("needs macOS", "not configured"). This keeps every
-  source independently importable (e.g. by a future push agent) via the
-  `./sources/*` exports. `createCollector()` (`src/collector.ts`) is the one
+  siblings, `time.ts`, and contract _types_ — never the engine (`@dash/backend`:
+  store, sampling, scheduler, trpc, router) and never the secrets loader. Each
+  source factory takes its **narrow config** and closes over it (`poll()` takes
+  no arguments; constructors do no I/O); `collector/src/registry.ts` is the
+  **only** reader of the whole `Secrets` bag and the only place that gates
+  ("needs macOS", "not configured"). Sources staying in `@dash/collector` keeps
+  them independently importable (e.g. by the Mac push agent) via the
+  `./sources/*` exports. `createBackend()` (`backend/src/backend.ts`) is the one
   composition point; `main.ts` and the desktop shell are thin consumers.
 - Functional components + hooks only. **Composition over inheritance.**
 
@@ -129,11 +138,11 @@ Rules:
 install with `pnpm install --ignore-workspace`; its own `tsc --noEmit` is the
 typecheck — root `vp run -r` does not cover it). Boundaries:
 
-- **The shell owns no data.** It composes `createCollector()` in-process and
+- **The shell owns no data.** It composes `createBackend()` in-process and
   talks to it via `/api` like any other client (typed tRPC client, `AppRouter`
-  contract — never hand-written wire types). Data logic stays in the collector.
+  contract — never hand-written wire types). Data logic stays in the backend.
 - **The SPA must never require the preload bridge.** It stays a pure web client
-  (works when any browser points at the collector URL); `window.desktop` is for
+  (works when any browser points at the backend URL); `window.desktop` is for
   desktop-only extras.
 - **Remind, don't auto-sync.** Shell duties may nudge (e.g. the bank-staleness
   notification), but side-effecting syncs stay user gestures — the gesture is
@@ -157,7 +166,8 @@ how the data layer evolved. Apply them when adding a source, a mutation, or stat
   touches private data, compute the scalar you need at the edge and return only
   that — `moneymoney.ts`'s `COUNT_UNCHECKED` counts unchecked transactions inside
   the JXA and returns a single integer, so transaction contents never enter the
-  collector process. Corollary for debugging such a source: inspect schema and
+  host process (the backend now, the Mac agent later). Corollary for debugging
+  such a source: inspect schema and
   aggregate counts only, never individual records.
 - **Verify integration assumptions against the live source, not from memory.**
   Field names, payload shapes, and identifiers are guesses until confirmed with a
@@ -217,13 +227,13 @@ how the data layer evolved. Apply them when adding a source, a mutation, or stat
 - **Ambient TS types**: reference `vite-plus/client` (not `vite/client`) — it
   resolves under pnpm's strict `node_modules` layout, where plain `vite` is not
   hoisted.
-- **Data comes from the collector** (`node:sqlite`; seeded on first run via
-  `packages/collector/src/seed.ts`). Real source adapters (JMAP/Fastmail,
+- **Data comes from the backend** (`node:sqlite`; seeded on first run via
+  `packages/backend/src/seed.ts`). Real source adapters (JMAP/Fastmail,
   MoneyMoney via AppleScript, Toggl) live in `packages/collector/src/sources`
-  behind a common `Source` port; the `scheduler` polls the HTTP sources and the
-  `sampler` commits day-bucketed history. Add sources there, never in the SPA.
-  Run both services with `devenv up` (collector on `:4319`, dashboard on `:5173`,
-  which proxies `/api` → the collector).
+  behind a common `Source` port; the backend's `scheduler` polls the HTTP sources
+  and the `sampler` commits day-bucketed history. Add sources under
+  `collector/src/sources`, never in the SPA. Run both services with `devenv up`
+  (backend on `:4319`, dashboard on `:5173`, which proxies `/api` → the backend).
 - **MoneyMoney syncs on-demand, not on a timer.** It is absent from the
   scheduler's `jobs`; the bank card's ↺ button calls the `syncBank` tRPC
   mutation, which polls it once (the manual trigger is the opt-in, so the macOS
