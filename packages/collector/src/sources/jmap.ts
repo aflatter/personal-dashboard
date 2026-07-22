@@ -1,3 +1,4 @@
+import { Agent } from "undici";
 import type { InboxAccount, SourceId } from "../contract.ts";
 import type { Poll, Source } from "./port.ts";
 import { SseParser } from "./sse.ts";
@@ -200,12 +201,33 @@ function startPush(token: string, id: SourceId, onChange: () => void): () => voi
     let backoff = BASE_BACKOFF_MS;
     while (!stopped) {
       let stale = false;
+      // A connection pool dedicated to this stream and thrown away on every
+      // reconnect, so the stream's socket never enters the pool the polls share.
+      // A push stream can die silently — no FIN arrives, because Fastmail sends
+      // no reliable keep-alive (see LIVENESS_TIMEOUT_MS) and an idle flow gets
+      // dropped in transit. Left in a shared keep-alive pool that corpse is
+      // handed to the next request, which then writes into a dead socket and
+      // hangs until its timeout — permanently, since nothing evicts it. Scoping
+      // it here means the socket dies with the Agent instead.
+      //
+      // bodyTimeout: 0 because SSE is legitimately idle for long stretches;
+      // undici's 5-minute default would kill a healthy-but-quiet stream, and
+      // staleness is already handled by the liveness backstop in `consume`.
+      const dispatcher = new Agent({
+        connections: 1,
+        headersTimeout: REQUEST_TIMEOUT_MS,
+        bodyTimeout: 0,
+      });
       try {
         const session = await openSession(token);
         controller = new AbortController();
         const res = await fetch(pushUrl(session.eventSourceUrl), {
           headers: { Authorization: `Bearer ${token}`, Accept: "text/event-stream" },
           signal: controller.signal,
+          // @types/node ships its own copy of undici's types, so the Agent we
+          // construct is nominally a different Dispatcher than global fetch's
+          // RequestInit declares — identical at runtime, two type identities.
+          dispatcher: dispatcher as unknown as RequestInit["dispatcher"],
         });
         if (!res.ok || !res.body) throw new Error(`JMAP eventsource HTTP ${res.status}`);
         // Connected: resync once (a change may have landed while we were down),
@@ -227,6 +249,10 @@ function startPush(token: string, id: SourceId, onChange: () => void): () => voi
         // A stale-recycle abort throws too, but it's expected — don't cry wolf.
         if (stopped) break;
         if (!stale) console.warn(`source ${id}: push stream error (${errMsg(err)}); reconnecting`);
+      } finally {
+        // Runs on every exit path (including the `break`s): closes this stream's
+        // socket outright, so nothing survives to be reused by a later request.
+        await dispatcher.destroy();
       }
       if (stopped) break;
       await sleep(backoff, controller.signal);

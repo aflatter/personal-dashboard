@@ -46,7 +46,8 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "secretspec": "^0.13.0"
+    "secretspec": "^0.13.0",
+    "undici": "^7.0.0"
   },
   "devDependencies": {
     "@types/node": "^24.7.0",
