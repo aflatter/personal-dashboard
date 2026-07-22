@@ -1,5 +1,5 @@
+import { buildBankSource } from "@dash/collector/bank";
 import type { BankState } from "@dash/collector/contract";
-import { buildBankSource } from "@dash/collector/registry";
 import type { Secrets } from "@dash/collector/secrets";
 
 /**

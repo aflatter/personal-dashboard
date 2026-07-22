@@ -8,11 +8,19 @@ import { Card, CardHeader, Pill, StatNumber, SyncButton } from "./ui";
  * Read-only: MoneyMoney owns the checked/unchecked truth. MoneyMoney is synced
  * on demand (the ↺ button), never on a timer; the pill shows when it was last
  * synced and turns amber once the data is stale (never synced, or > 7 days old).
+ *
+ * The ↺ button only appears on the Mac: MoneyMoney can only be read by a native
+ * process there, so the Mac agent collects and pushes the backlog. Every other
+ * device shows the last value the Mac pushed, read-only — hence no control to
+ * offer, rather than a button that couldn't work.
  */
 export function BankCard() {
-  const { state, now, bankSyncing, syncBank } = useDashboardStore();
+  const { state, now, bankSyncing, canSyncBank, bankError, syncBank } = useDashboardStore();
   const view = bankView(state.bank, now);
-  const { ok, error } = state.meta.bank;
+  // A local collect failure (MoneyMoney locked) never reaches the backend, so it
+  // is only in `bankError`; `meta.bank` carries what the backend last recorded.
+  const { ok, error: recordedError } = state.meta.bank;
+  const error = bankError ?? (ok ? null : recordedError);
   const label =
     view.syncedAt === null ? "nie synchronisiert" : `Sync: ${formatDayMonth(view.syncedAt)}`;
 
@@ -24,7 +32,7 @@ export function BankCard() {
         right={
           <div className="flex items-center gap-3">
             <Pill stale={view.stale}>{label}</Pill>
-            <SyncButton syncing={bankSyncing} onClick={syncBank} />
+            {canSyncBank ? <SyncButton syncing={bankSyncing} onClick={syncBank} /> : null}
           </div>
         }
       />
@@ -39,7 +47,7 @@ export function BankCard() {
         />
       </div>
       {/* The last sync failed (e.g. MoneyMoney locked) — show why; the count above is last-good. */}
-      {!ok && error ? <p className="text-[11px] text-status-overdue mt-3">{error}</p> : null}
+      {error ? <p className="text-[11px] text-status-overdue mt-3">{error}</p> : null}
     </Card>
   );
 }

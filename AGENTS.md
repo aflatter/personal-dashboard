@@ -72,17 +72,19 @@ packages/
   collector/     Acquisition library (no HTTP, no store). Shared by the backend
                  and the Mac agent. Node 26 runs .ts directly — no build.
                  src/: contract (data types), secrets (loader), time,
-                 registry (Secrets → configured sources + Job/BankGate),
-                 sources/ (leaf adapters).
-                 Exports: `.` → acquisition barrel · `./contract` → data types ·
-                 `./registry` → source wiring · `./secrets` → loader ·
+                 registry (Secrets → polled sources + Job), bank (the Mac-only
+                 bank gate, kept OUT of registry so the bundled agent doesn't
+                 carry JMAP/Toggl/undici), sources/ (leaf adapters).
+                 Exports: `.` → acquisition barrel (never from a bundled app) ·
+                 `./contract` → data types · `./registry` → polled-source wiring ·
+                 `./bank` → the bank gate · `./secrets` → loader ·
                  `./time` · `./sources/{port,jmap,moneymoney,toggl}`.
   backend/       The always-on service (Node 26, .ts direct). Embeds @dash/collector;
                  owns day-bucketed history + durable state in node:sqlite; serves
                  a tRPC API on 127.0.0.1 (loopback).
                  src/: trpc, router (the API), store/db, seed, state, scheduler,
-                 bank (pushBankBacklog receiver), sync (transitional in-process
-                 bank sync), backend (createBackend factory), main (thin bin).
+                 bank (pushBankBacklog receiver), sync (on-demand inbox sync),
+                 backend (createBackend factory), main (thin bin).
                  Exports: `.` → AppRouter type · `./backend` → createBackend.
   agent/         The Mac push agent (Node library; runs in the Electron main
                  process). Embeds @dash/collector for the MoneyMoney source, and
@@ -138,18 +140,28 @@ Rules:
   composition point; `main.ts` and the desktop shell are thin consumers.
 - Functional components + hooks only. **Composition over inheritance.**
 
-## apps/ — desktop shell (outside the workspace)
+## apps/ — the Mac app (outside the workspace)
 
-`apps/desktop-electron/` is the macOS Electron shell (a standalone pnpm root:
+`apps/desktop-electron/` is the macOS Electron app (a standalone pnpm root:
 install with `pnpm install --ignore-workspace`; its own `tsc --noEmit` is the
-typecheck — root `vp run -r` does not cover it). Boundaries:
+typecheck — root `vp run -r` does not cover it). Two roles, one app: the main
+process is the **push agent** (`@dash/agent` — MoneyMoney collected locally,
+POSTed to `pushBankBacklog`), the renderer is a **thin loader** for the SPA the
+backend serves. Boundaries:
 
-- **The shell owns no data.** It composes `createBackend()` in-process and
-  talks to it via `/api` like any other client (typed tRPC client, `AppRouter`
-  contract — never hand-written wire types). Data logic stays in the backend.
+- **The app owns no data and serves nothing.** The backend runs in k3s; the app
+  reads it via `/api` like any other client (typed tRPC client, `AppRouter`
+  contract — never hand-written wire types) and pushes the bank backlog to it.
+  It must not bundle the serving half — that is what keeps the agent lean.
 - **The SPA must never require the preload bridge.** It stays a pure web client
-  (works when any browser points at the backend URL); `window.desktop` is for
-  desktop-only extras.
+  (works when any browser points at the backend URL); `window.dashboardAgent` is
+  the _one_ device-specific branch — present on the Mac → the bank ↺ is offered,
+  absent elsewhere → the control is hidden and the last pushed value is shown.
+- **Packaged = bundled.** `scripts/stage-resources.ts` rolls the main process
+  into one ESM file. Shipping raw `.ts` cannot work: any copy of `@dash/*` into
+  the app lands under `node_modules`, where Node refuses to strip types
+  (`ERR_UNSUPPORTED_NODE_MODULES_TYPE_STRIPPING`); dev escapes it only because
+  pnpm's symlinks put the realpath outside `node_modules`.
 - **Remind, don't auto-sync.** Shell duties may nudge (e.g. the bank-staleness
   notification), but side-effecting syncs stay user gestures — the gesture is
   the opt-in that scopes the macOS Automation/TCC prompt.
@@ -165,9 +177,9 @@ how the data layer evolved. Apply them when adding a source, a mutation, or stat
   prompt) runs on an explicit user action, not a timer — and the user gesture
   _is_ the opt-in, so a macOS Automation/TCC prompt fires exactly when asked,
   never in the background. Don't add an env gate a gesture already provides (we
-  dropped `MONEYMONEY=1`). See `bankSource`/`syncBank`, kept out of `jobs` in
-  `buildBankSource` in `packages/collector/src/registry.ts` — the bank is
-  deliberately absent from `buildJobs`.
+  dropped `MONEYMONEY=1`). See `buildBankSource` in
+  `packages/collector/src/bank.ts` — the bank is deliberately absent from
+  `buildJobs`, and is now collected only by the Mac agent on that gesture.
 - **Reduce sensitive data at the boundary; never carry it inward.** When a source
   touches private data, compute the scalar you need at the edge and return only
   that — `moneymoney.ts`'s `COUNT_UNCHECKED` counts unchecked transactions inside
@@ -240,22 +252,21 @@ how the data layer evolved. Apply them when adding a source, a mutation, or stat
   and the `sampler` commits day-bucketed history. Add sources under
   `collector/src/sources`, never in the SPA. Run both services with `devenv up`
   (backend on `:4319`, dashboard on `:5173`, which proxies `/api` → the backend).
-- **MoneyMoney syncs on-demand, not on a timer.** It is absent from the
-  scheduler's `jobs`; the bank card's ↺ button calls the `syncBank` tRPC
-  mutation, which polls it once (the manual trigger is the opt-in, so the macOS
-  Automation/TCC prompt happens only when the user asks — needs MoneyMoney
-  unlocked). **Migration in progress:** `syncBank` runs MoneyMoney _in-process_
-  and only works when the backend runs on the Mac (the current Electron shell).
-  The target model is the Mac agent collecting locally and POSTing to the
-  backend's `pushBankBacklog` mutation (`backend/src/bank.ts`) — the backend
-  never polls MoneyMoney. `pushBankBacklog` already exists (the receive half);
-  `syncBank` is transitional and is removed once the agent + the bank source move
-  Mac-side. The account to read is `MONEYMONEY_ACCOUNT` — a **required** secret,
-  IBAN preferred (unique and stable, unlike an account name, which MoneyMoney
-  does not guarantee unique); there is no hardcoded default, so `bank` stays
-  not-ready until it is configured. The card shows the last successful sync date
-  and turns amber when the data is stale (never synced, or > 7 days old, see
-  `BANK_STALE_AFTER`).
+- **MoneyMoney is pushed by the Mac, never polled by the backend.** It is absent
+  from the scheduler's `jobs` and has no server-side sync mutation: only a native
+  Mac process can read it, so the Electron main process (`@dash/agent`) collects
+  it on the bank card's ↺ gesture and POSTs the result to `pushBankBacklog`
+  (`backend/src/bank.ts`), which broadcasts it to every device. The manual
+  trigger is the opt-in, so the macOS Automation/TCC prompt happens only when the
+  user asks — and needs MoneyMoney unlocked. Failures stay local: nothing is
+  pushed, the backend keeps its last-good value, and the Mac shows why. The
+  account to read is **not** a secret and never goes to the cluster — it is
+  `moneyMoneyAccount` in the Mac app's host config
+  (`~/.config/personal-dashboard/config.json`), IBAN preferred (unique and
+  stable, unlike an account name, which MoneyMoney does not guarantee unique).
+  There is no default, so the source stays gated off until it is set. The card
+  shows the last successful sync date and turns amber when the data is stale
+  (never synced, or > 7 days old, see `BANK_STALE_AFTER`).
 - **Sources degrade gracefully.** A source without its secret is skipped, and any
   poll failure marks only that source `ok:false` while the rest keep serving.
   Secrets are declared in `secretspec.toml` and loaded in-process at boot via the

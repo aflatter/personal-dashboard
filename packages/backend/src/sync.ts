@@ -1,34 +1,13 @@
-import type { BankGate } from "@dash/collector/registry";
 import type { Source } from "@dash/collector/sources/port";
 import { pollOnce } from "./sampling/sampler.ts";
 import type { Db } from "./store/db.ts";
 
-let bankInFlight: Promise<void> | null = null;
 let inboxInFlight: Promise<void> | null = null;
 
-/**
- * Poll MoneyMoney once, coalescing concurrent callers into a single osascript
- * run — a second click (another tab, a rapid re-click) awaits the in-flight sync
- * instead of spawning a parallel AppleScript. `pollOnce` is fault-isolated, so a
- * failure (locked / not authorized) is recorded on the source, never thrown.
- *
- * A gated-off bank (`source: null` — wrong platform or unconfigured account)
- * marks the snapshot with the gate's reason while keeping the last-good data,
- * so the card can surface why the sync didn't run.
- */
-export function syncBankOnce(db: Db, bank: BankGate, now: number): Promise<void> {
-  if (!bank.source) {
-    db.markSourceError("bank", bank.reason, now);
-    return Promise.resolve();
-  }
-  const source = bank.source;
-  if (!bankInFlight) {
-    bankInFlight = pollOnce(db, source, now).finally(() => {
-      bankInFlight = null;
-    });
-  }
-  return bankInFlight;
-}
+// There is no bank equivalent here on purpose: MoneyMoney can only be read by a
+// native Mac process, so the Mac agent collects it locally and pushes the result
+// to `pushBankBacklog`. The backend never polls it — not even when it happens to
+// run on a Mac.
 
 /**
  * Force a live JMAP fetch of every inbox, on demand — this is what the inbox

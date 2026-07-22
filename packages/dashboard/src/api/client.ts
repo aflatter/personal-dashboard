@@ -75,7 +75,26 @@ export function subscribeState(
   return () => sub.unsubscribe();
 }
 
-/** Trigger an on-demand MoneyMoney sync (the bank card's sync button). */
-export async function requestBankSync(): Promise<DashboardState> {
-  return mapState(await trpc.syncBank.mutate());
+/**
+ * The Mac agent bridge, exposed by the Electron preload (`window.dashboardAgent`).
+ *
+ * MoneyMoney can only be read by a native Mac process, so the bank refresh is not
+ * a backend call from the browser: the Mac collects locally and pushes the result
+ * to the backend, which then broadcasts it to every device. This is therefore the
+ * one device-specific branch in the SPA — present in the Electron shell, absent
+ * on the phone and in a plain browser tab (where the ↺ control is hidden).
+ */
+export interface DashboardAgent {
+  refreshBank: () => Promise<{ ok: true } | { ok: false; error: string }>;
+}
+
+declare global {
+  interface Window {
+    dashboardAgent?: DashboardAgent;
+  }
+}
+
+/** The agent bridge if this device has one (the Mac app), else null. */
+export function dashboardAgent(): DashboardAgent | null {
+  return typeof window === "undefined" ? null : (window.dashboardAgent ?? null);
 }

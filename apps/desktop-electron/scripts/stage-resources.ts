@@ -1,77 +1,63 @@
-// Stages the self-contained resources the packaged .app ships (run before
-// electron-builder — `pnpm package` chains both):
+// Builds what the packaged .app ships (run before electron-builder — `pnpm
+// package` chains both):
 //
-//   .build/resources/backend/          pnpm-deployed backend: src/ (.ts, run
-//                                      by Electron's Node via type-stripping —
-//                                      no build) + a flat, symlink-free
-//                                      node_modules incl. @dash/collector (the
-//                                      acquisition library it depends on) and
-//                                      the secretspec darwin-arm64 N-API .node
-//   .build/resources/dist/             the SPA production build
-//   .build/resources/secretspec.toml   secret declarations (SECRETSPEC_PATH
-//                                      target — the deployed tree's relative
-//                                      default would point outside Resources)
+//   .build/app/main.js      the Electron main process, bundled to one ESM file
+//   .build/app/preload.js   copied verbatim (plain CJS, loaded by Electron's own
+//                           CJS loader, so it is never bundled)
 //
-// The deploy uses --legacy --config.node-linker=hoisted (learned in the Tauri
-// spike): flat and symlink-free so the tree survives being copied into an .app
-// bundle. Unlike Tauri there is NO Node runtime to ship — the collector runs
-// on Electron's own Node in the main process.
+// That is the whole payload. The app is an *agent*: it collects MoneyMoney on
+// this Mac and pushes it to the backend in k3s, which serves the SPA and owns the
+// store (docs/multi-device-sync-briefing.md §7.3). Nothing of the serving half —
+// no collector deps, no SPA build, no sqlite, no secretspec — belongs here.
 //
-// Run from inside `devenv shell` (needs pnpm + vp): node scripts/stage-resources.ts
+// Why bundle rather than ship .ts and let Electron's Node strip types, the way
+// `pnpm start` runs in dev: main.ts imports `@dash/agent`, which imports
+// `@dash/collector`, and *any* copy of those into the app would land under
+// node_modules, where Node hard-refuses to strip types
+// (ERR_UNSUPPORTED_NODE_MODULES_TYPE_STRIPPING — it works in dev only because
+// pnpm's symlinks make the realpath land outside node_modules). Bundling to one
+// JS file is both the standard Electron main-process shape and the thing that
+// makes that failure structurally impossible. The bundle has no native modules
+// and no runtime deps at all.
+//
+// Run from inside `devenv shell` (needs pnpm + vite): node scripts/stage-resources.ts
 
 import { execFileSync } from "node:child_process";
-import { cpSync, copyFileSync, existsSync, mkdirSync, rmSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, rmSync, statSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const appDir = resolve(here, "..");
 const repoRoot = resolve(appDir, "../..");
-const resourcesDir = resolve(appDir, ".build/resources");
-const backendOut = resolve(resourcesDir, "backend");
+const outDir = resolve(appDir, ".build/app");
 
-const run = (cmd: string, args: string[], cwd: string) =>
-  execFileSync(cmd, args, { stdio: "inherit", cwd });
+console.log("▶ building the packaged app's main process\n");
 
-console.log("▶ staging packaged-app resources\n");
+rmSync(outDir, { recursive: true, force: true });
+mkdirSync(outDir, { recursive: true });
 
-// Clean staging so pnpm deploy gets an empty target.
-rmSync(resourcesDir, { recursive: true, force: true });
-mkdirSync(resourcesDir, { recursive: true });
-
-// 1. Self-contained backend: production deps only, flat/hoisted node_modules.
-// Deploying @dash/backend (not @dash/collector) pulls the acquisition library
-// in as a dependency, so the tree carries both packages — the shell imports
-// src/host.ts from here and @dash/collector resolves inside this node_modules.
-console.log("▶ pnpm deploy (backend, --prod, hoisted)…");
-run(
-  "pnpm",
-  [
-    "--filter",
-    "@dash/backend",
-    "--legacy",
-    "--config.node-linker=hoisted",
-    "deploy",
-    "--prod",
-    backendOut,
-  ],
-  repoRoot,
-);
-const addon = resolve(
-  backendOut,
-  "node_modules/secretspec-darwin-arm64/secretspec.darwin-arm64.node",
-);
-if (!existsSync(addon)) throw new Error(`native addon missing from deploy: ${addon}`);
-console.log("▶ deployed backend OK (secretspec .node present)");
-
-// 2. SPA production build → resources/dist.
-console.log("▶ building SPA…");
-run("./node_modules/.bin/vp", ["build", "packages/dashboard"], repoRoot);
-cpSync(resolve(repoRoot, "packages/dashboard/dist"), resolve(resourcesDir, "dist"), {
-  recursive: true,
+// Bundled from the REPO ROOT, not from apps/desktop-electron: the desktop app is
+// deliberately outside the pnpm workspace (`--ignore-workspace`, so Electron
+// never touches the root lockfile), and main.ts reaches the agent by relative
+// path. Rolling it up from the root lets `@dash/collector`'s bare specifiers
+// resolve through the workspace's own node_modules.
+// Through `vp` (the workspace's toolchain) rather than a bare `vite` binary:
+// vite is only a transitive dependency here, so its hoisted bin is not ours to
+// rely on — `vp build` takes the same --config and is the project's declared
+// build entry point.
+console.log("▶ bundling src/main.ts → .build/app/main.js…");
+execFileSync("./node_modules/.bin/vp", ["build", "--config", resolve(here, "vite.main.ts")], {
+  stdio: "inherit",
+  cwd: repoRoot,
 });
 
-// 3. Secret declarations.
-copyFileSync(resolve(repoRoot, "secretspec.toml"), resolve(resourcesDir, "secretspec.toml"));
+const bundle = resolve(outDir, "main.js");
+if (!existsSync(bundle)) throw new Error(`bundle missing: ${bundle}`);
 
-console.log("\n✓ resources staged in .build/resources\n");
+// Plain CJS, loaded by Electron's preload mechanism rather than by Node's ESM
+// loader — it must stay a standalone file next to main.js (main.ts resolves it
+// relative to its own directory, which is true in dev and here alike).
+copyFileSync(resolve(appDir, "src/preload.js"), resolve(outDir, "preload.js"));
+
+console.log(`\n✓ .build/app ready (main.js ${(statSync(bundle).size / 1024).toFixed(0)} kB)\n`);

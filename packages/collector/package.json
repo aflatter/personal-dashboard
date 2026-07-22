@@ -16,6 +16,10 @@
       "types": "./src/registry.ts",
       "default": "./src/registry.ts"
     },
+    "./bank": {
+      "types": "./src/bank.ts",
+      "default": "./src/bank.ts"
+    },
     "./secrets": {
       "types": "./src/secrets.ts",
       "default": "./src/secrets.ts"

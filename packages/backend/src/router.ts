@@ -2,7 +2,7 @@ import { on } from "node:events";
 import { z } from "zod";
 import type { Settings } from "@dash/collector/contract";
 import { recordBankBacklog } from "./bank.ts";
-import { syncBankOnce, syncInboxesOnce } from "./sync.ts";
+import { syncInboxesOnce } from "./sync.ts";
 import { buildState } from "./state.ts";
 import { publicProcedure, router } from "./trpc.ts";
 
@@ -84,18 +84,6 @@ export const appRouter = router({
     recordBankBacklog(ctx.db, input, Date.now());
     // Emit like every other mutation, so a push from the Mac reaches subscribed
     // clients (the phone) over the live stream instead of waiting for a re-read.
-    ctx.bus.emit("change");
-    return buildState(ctx.db);
-  }),
-
-  // Transitional: in-process MoneyMoney sync (single-flight osascript), used only
-  // when the backend runs on the Mac itself (the current Electron shell). It is
-  // superseded by `pushBankBacklog` once the Mac push agent lands, and will be
-  // removed together with the dashboard's bank-refresh button then. Fault-isolated:
-  // a locked / not-authorized MoneyMoney flips bank to ok:false with the error and
-  // the mutation still returns coherent state, so the card can surface it.
-  syncBank: publicProcedure.mutation(async ({ ctx }) => {
-    await syncBankOnce(ctx.db, ctx.bank, Date.now());
     ctx.bus.emit("change");
     return buildState(ctx.db);
   }),

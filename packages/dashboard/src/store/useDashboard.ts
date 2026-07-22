@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { Settings } from "../domain";
 import {
+  dashboardAgent,
   fetchState,
   markRentDone,
   markTaxDone,
-  requestBankSync,
   requestSync,
   saveSettings,
   subscribeState,
@@ -39,6 +39,14 @@ export interface DashboardStore {
   syncing: boolean;
   /** True while an on-demand MoneyMoney sync is in flight. */
   bankSyncing: boolean;
+  /**
+   * Whether this device can refresh MoneyMoney at all — i.e. it is the Mac app,
+   * where the agent bridge exists. False on the phone / in a browser tab, which
+   * read the last-known backlog the Mac pushed.
+   */
+  canSyncBank: boolean;
+  /** Why the last local MoneyMoney refresh failed (locked, not authorised, …). */
+  bankError: string | null;
   /** False when the last collector call failed — the UI is showing cached data. */
   online: boolean;
   sync: () => void;
@@ -54,6 +62,7 @@ export function useDashboard() {
   const [state, setState] = useState<DashboardState | null>(() => loadCache());
   const [syncing, setSyncing] = useState(false);
   const [bankSyncing, setBankSyncing] = useState(false);
+  const [bankError, setBankError] = useState<string | null>(null);
   const [online, setOnline] = useState(true);
   const syncingRef = useRef(false);
   const bankSyncingRef = useRef(false);
@@ -113,15 +122,28 @@ export function useDashboard() {
       });
   }, [apply]);
 
-  // On-demand MoneyMoney sync — can be slow (AppleScript) and can fail, so it
-  // carries its own in-flight flag independent of the inbox refresh.
+  // On-demand MoneyMoney sync. Runs on the *Mac*, not the backend: the agent
+  // collects locally (AppleScript — slow, and fails when MoneyMoney is locked)
+  // and pushes the result up, so a failure is a local condition the person at
+  // this Mac can fix, not a backend error. Own in-flight flag, independent of the
+  // inbox refresh. On success we re-read state rather than trust the round trip;
+  // the live subscription would deliver it too, just a beat later.
   const syncBank = useCallback(() => {
-    if (bankSyncingRef.current) return;
+    const agent = dashboardAgent();
+    if (!agent || bankSyncingRef.current) return;
     bankSyncingRef.current = true;
     setBankSyncing(true);
-    requestBankSync()
-      .then(apply)
-      .catch(() => setOnline(false))
+    setBankError(null);
+    agent
+      .refreshBank()
+      .then((result) => {
+        if (!result.ok) {
+          setBankError(result.error);
+          return;
+        }
+        return fetchState().then(apply);
+      })
+      .catch((err: unknown) => setBankError(err instanceof Error ? err.message : String(err)))
       .finally(() => {
         bankSyncingRef.current = false;
         setBankSyncing(false);
@@ -140,6 +162,8 @@ export function useDashboard() {
     now,
     syncing,
     bankSyncing,
+    canSyncBank: dashboardAgent() !== null,
+    bankError,
     online,
     sync,
     syncBank,

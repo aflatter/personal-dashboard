@@ -1,7 +1,6 @@
 import type { InboxAccount, SourceId } from "./contract.ts";
 import type { Secrets } from "./secrets.ts";
 import { jmapInbox } from "./sources/jmap.ts";
-import { moneyMoneyBank } from "./sources/moneymoney.ts";
 import type { Source } from "./sources/port.ts";
 import { togglHours } from "./sources/toggl.ts";
 
@@ -33,7 +32,7 @@ export interface Job {
  * sample on a day with no push activity.
  *
  * Bank (MoneyMoney) is deliberately absent from the jobs: it syncs on-demand
- * only (see `buildBankSource` + the router's `syncBank` mutation), never on a
+ * only (see `buildBankSource` in ./bank.ts, built by the Mac agent), never on a
  * timer.
  */
 export function buildJobs(secrets: Secrets): Job[] {
@@ -60,16 +59,6 @@ export function buildJobs(secrets: Secrets): Job[] {
   return jobs;
 }
 
-/**
- * The bank source when it can run here, else the human-facing reason it can't —
- * surfaced on the bank card via `syncBankOnce`'s markSourceError.
- */
-export type BankGate = { source: Source; reason?: undefined } | { source: null; reason: string };
-
-export function buildBankSource(secrets: Secrets): BankGate {
-  if (process.platform !== "darwin") return { source: null, reason: "MoneyMoney sync needs macOS" };
-  if (!secrets.moneyMoneyAccount) {
-    return { source: null, reason: "MoneyMoney account not configured (set MONEYMONEY_ACCOUNT)" };
-  }
-  return { source: moneyMoneyBank({ account: secrets.moneyMoneyAccount }) };
-}
+// The bank source lives in ./bank.ts, NOT here — deliberately. It is built only
+// by the Mac agent, whose bundle would otherwise carry the JMAP + Toggl sources
+// (and undici) for calls it never makes. Keep this module for polled sources.

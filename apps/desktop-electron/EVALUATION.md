@@ -1,5 +1,17 @@
 # Electron packaging spike — evaluation
 
+> **Historical record — the architecture has since moved on.** This documents the
+> spike that chose Electron over Tauri, when the app hosted the collector
+> **in-process** and shipped a pnpm-deployed backend + SPA build inside the
+> bundle. Now that the backend runs in k3s, the Mac app is only the **push agent**
+> plus a window on the backend-served SPA (docs/multi-device-sync-briefing.md
+> §7.3): `collector-host.ts` is gone, nothing is staged into `Contents/Resources`,
+> secretspec is no longer used here, and the main process is **bundled** to one
+> `.js` (Node refuses to type-strip under `node_modules`, which any copied
+> `@dash/*` would be). The findings below about Electron itself — `node:sqlite`,
+> N-API addons, type-stripping, ESM — still hold; the packaging pipeline they
+> describe does not. See AGENTS.md → "apps/ — the Mac app" for the current shape.
+
 Spike goal: would shipping the dashboard SPA + Node collector as one **Electron**
 app be _easier_ than the **Tauri v2** approach we already prototyped
 (`apps/desktop/`, branch `claude/pensive-carson-d28647`)? The Electron hypothesis:

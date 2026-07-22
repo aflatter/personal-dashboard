@@ -1,7 +1,7 @@
 import { EventEmitter } from "node:events";
 import type { RequestListener } from "node:http";
 import { createHTTPHandler } from "@trpc/server/adapters/standalone";
-import { buildBankSource, buildJobs } from "@dash/collector/registry";
+import { buildJobs } from "@dash/collector/registry";
 import type { Secrets } from "@dash/collector/secrets";
 import { appRouter } from "./router.ts";
 import { seed } from "./seed.ts";
@@ -41,8 +41,6 @@ export function createBackend(opts: BackendOptions): Backend {
     console.log("seeded empty database");
   }
 
-  const bank = buildBankSource(opts.secrets);
-
   // Fires "change" whenever stored state moves, so the live `onStateChange`
   // subscription re-emits. One listener per open browser tab — lift the default
   // cap so many tabs don't trip a MaxListeners warning.
@@ -50,7 +48,8 @@ export function createBackend(opts: BackendOptions): Backend {
   bus.setMaxListeners(0);
 
   // Poll real sources on their cadences (the registry skips any without a
-  // secret). MoneyMoney is not here — it syncs on-demand via `syncBank`. Each
+  // secret). MoneyMoney is not here and never will be: only a native Mac process
+  // can read it, so the Mac agent pushes it in via `pushBankBacklog`. Each
   // committed poll (timer or JMAP push) pings the bus so live subscribers update.
   const jobs = buildJobs(opts.secrets);
   startScheduler(db, jobs, () => bus.emit("change"));
@@ -61,7 +60,7 @@ export function createBackend(opts: BackendOptions): Backend {
 
   const trpcHandler = createHTTPHandler({
     router: appRouter,
-    createContext: () => ({ db, bank, inboxes, bus }),
+    createContext: () => ({ db, inboxes, bus }),
   });
 
   // A plain /health route backs readiness probes (tRPC would 404 it).

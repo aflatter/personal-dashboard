@@ -1,33 +1,45 @@
-// Electron main entry for the personal-dashboard desktop spike (macOS-only).
+// Electron main entry for the personal-dashboard Mac app (macOS-only).
 //
-// This file is TypeScript, run directly by Electron's Node 24 via type-stripping
-// — no build step, same as the collector. Flow: on ready → boot the collector
-// in-process and wait for its loopback /health → open a hardened window on that
-// same loopback origin. Quit tears the collector down with the process (no
-// sidecar, no orphan). The one non-.ts file is preload.js (plain CJS) — a
-// sandboxed preload is loaded by Electron's own CJS loader, not Node's
-// type-stripping ESM loader, and it exposes almost nothing, so it stays JS.
+// The Mac has two roles in one app (docs/multi-device-sync-briefing.md §7.3):
 //
-// Desktop-shell duties (beyond showing the SPA):
+//   - Main process = the AGENT. Runs the MoneyMoney source — the one source that
+//     can only be collected by a native Mac process — and PUSHES the result to
+//     the backend over the tailnet. Push-only: it never serves, never subscribes
+//     for commands, and holds no store. Triggered locally (the renderer's ↺ via
+//     IPC), because the trigger is the only Mac-bound part; the value itself
+//     reaches every device seconds later through the backend's live stream.
+//   - Renderer = a thin PWA loader. Loads the *same* SPA the phone loads, from
+//     the backend, so the Mac UI auto-updates with every deploy. The single
+//     device-specific branch is the `window.dashboardAgent` preload bridge:
+//     present here → the bank ↺ control is enabled; absent on the phone → hidden.
+//
+// The backend (collector, store, scheduler, SPA) runs in k3s and is deliberately
+// NOT bundled here — per the briefing, "the Electron agent must not bundle the
+// serving half". That keeps this app to one JS bundle with no native modules.
+//
+// This file is TypeScript: run directly by Electron's Node via type-stripping in
+// dev (`pnpm start`), bundled to one .js for the packaged app (see
+// scripts/stage-resources.ts). The one non-.ts file is preload.js (plain CJS) —
+// a sandboxed preload is loaded by Electron's own CJS loader, not Node's ESM
+// loader, and it exposes almost nothing, so it stays JS.
+//
+// Other desktop-shell duties:
 //   - login item: packaged builds register themselves to start at login
 //   - bank staleness reminder: if MoneyMoney data hasn't been synced for 3 days,
 //     post a macOS notification (at most once a day). Reminder only — the sync
 //     itself stays a deliberate user gesture (the bank card's ↺), so the macOS
 //     Automation/TCC prompt never fires unattended.
-// The reminder reads bank.syncedAt from the same /api/state the SPA uses, via
-// whatever origin the shell points at — in-process collector today, a remote
-// hub later. The mechanism survives the hub-and-spoke split unchanged.
 
 import { createTRPCClient, httpBatchLink } from "@trpc/client";
-import { app, BrowserWindow, Notification, powerMonitor } from "electron";
+import { app, BrowserWindow, ipcMain, Notification, powerMonitor } from "electron";
 import type { BrowserWindow as BrowserWindowType } from "electron";
 import { readFile, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { AppRouter } from "../../../packages/backend/src/index.ts";
-import { startCollectorHost } from "./collector-host.ts";
-import type { CollectorHost } from "./collector-host.ts";
-import { augmentedPath, loadHostConfig } from "./host-config.ts";
+import { bankCollector, bankPusher, createBankAgent } from "../../../packages/agent/src/index.ts";
+import type { BankAgent, RefreshResult } from "../../../packages/agent/src/index.ts";
+import { backendUrl, loadHostConfig } from "./host-config.ts";
 
 const here = fileURLToPath(new URL(".", import.meta.url));
 const preloadPath = resolve(here, "preload.js");
@@ -38,36 +50,9 @@ const preloadPath = resolve(here, "preload.js");
 // !app.isPackaged guard.
 const devDockIcon = resolve(here, "../resources/icon/icon-512.png");
 
-// Dev runs against the workspace; the packaged .app carries a pnpm-deployed
-// collector, the SPA build, and secretspec.toml under Contents/Resources (see
-// scripts/stage-resources.ts + electron-builder.yml). Same code path either
-// way — only the roots differ.
-const repoRoot = resolve(here, "../../..");
-const resources = process.resourcesPath;
-const backendDir = app.isPackaged
-  ? resolve(resources, "backend")
-  : resolve(repoRoot, "packages/backend");
-const distDir = app.isPackaged
-  ? resolve(resources, "dist")
-  : resolve(repoRoot, "packages/dashboard/dist");
-if (app.isPackaged) {
-  // The deployed tree's relative default would point outside Resources.
-  process.env.SECRETSPEC_PATH ??= resolve(resources, "secretspec.toml");
-  // A Finder / login-item launch inherits only the minimal system PATH
-  // (/usr/bin:/bin:/usr/sbin:/sbin), so user-installed CLIs are invisible —
-  // notably `op`, which secretspec shells out to for 1Password. Without it the
-  // secret load throws, silently yields no sources, and the collector serves
-  // frozen data. Widen PATH from the optional host config (where the user points
-  // at their own `op`, e.g. a nix-profile path generated by home-manager) plus
-  // conventional macOS locations, so secret resolution can find it. A `pnpm start`
-  // dev run inherits the shell's PATH and never needs this.
-  process.env.PATH = augmentedPath(loadHostConfig(), process.env.PATH ?? "");
-}
-
-const HOST = process.env.COLLECTOR_HOST ?? "127.0.0.1";
-// 4390, not 4319: devenv up allocates the dev collector's port from 4319
-// upward, so the desktop shell binds elsewhere to coexist with a dev session.
-const PORT = Number(process.env.COLLECTOR_PORT ?? 4390);
+const config = loadHostConfig();
+const BACKEND_URL = backendUrl(config);
+const API_URL = new URL("/api", BACKEND_URL).href;
 
 const DAY = 24 * 60 * 60 * 1000;
 // Env-overridable for testing (ms). Defaults: remind after 3 days without a
@@ -75,28 +60,39 @@ const DAY = 24 * 60 * 60 * 1000;
 const REMIND_AFTER = Number(process.env.BANK_REMIND_AFTER_MS ?? 3 * DAY);
 const REMIND_CHECK_EVERY = Number(process.env.BANK_REMIND_CHECK_MS ?? 60 * 60 * 1000);
 const NAG_AT_MOST_EVERY = Number(process.env.BANK_REMIND_NAG_MS ?? DAY);
-
-let host: CollectorHost | null = null;
+// The backend is tailnet-only, so a Mac off the tailnet (or a pod mid-rollout)
+// simply can't load the UI. Retry rather than parking on a Chromium error page.
+const RELOAD_AFTER = Number(process.env.DASHBOARD_RETRY_MS ?? 15_000);
 
 // One instance only: a login-item app relaunched by hand should focus the
-// existing window, not fight over the port and double-notify.
+// existing window, not double-notify.
 if (!app.requestSingleInstanceLock()) {
   app.exit(0);
 }
 app.on("second-instance", () => void focusWindow());
 
-async function waitForHealth(url: string, timeoutMs = 60_000): Promise<void> {
-  const deadline = Date.now() + timeoutMs;
-  for (;;) {
-    try {
-      if ((await fetch(new URL("/health", url))).status === 204) return;
-    } catch {
-      /* not up yet */
-    }
-    if (Date.now() > deadline) throw new Error(`collector /health not ready within ${timeoutMs}ms`);
-    await new Promise((r) => setTimeout(r, 250));
-  }
-}
+// --- The agent ----------------------------------------------------------------
+
+// Push-only: collect the MoneyMoney backlog on this Mac, POST it to the backend.
+// `moneyMoneyAccount` is the source's only configuration and it is not a secret
+// (an IBAN selector, not a credential), so it comes from the host config file —
+// no secretspec, no 1Password, no native addon in this app.
+const agent: BankAgent = createBankAgent({
+  collect: bankCollector({ moneyMoneyAccount: config.moneyMoneyAccount }),
+  push: bankPusher(API_URL),
+});
+
+// The renderer's ↺ button, bridged through preload. `refresh` never throws — a
+// locked MoneyMoney or an unreachable backend comes back as { ok:false, error }
+// for the card to show. Nothing is pushed on failure, so the backend keeps its
+// last-good value; a success reaches every other device over the live stream.
+ipcMain.handle("agent:refresh-bank", async (): Promise<RefreshResult> => {
+  const result = await agent.refresh();
+  if (!result.ok) console.warn("[agent] bank refresh failed:", result.error);
+  return result;
+});
+
+// --- Window -------------------------------------------------------------------
 
 async function createWindow(): Promise<BrowserWindowType> {
   const win = new BrowserWindow({
@@ -111,7 +107,18 @@ async function createWindow(): Promise<BrowserWindowType> {
       sandbox: true,
     },
   });
-  await win.loadURL(host!.url);
+
+  // Offline / backend down / tailnet asleep: keep retrying quietly. Ignore -3
+  // (ABORTED), which a navigation superseded by our own reload reports.
+  win.webContents.on("did-fail-load", (_event, code, description, url, isMainFrame) => {
+    if (!isMainFrame || code === -3) return;
+    console.warn(`[main] load failed (${code} ${description}) for ${url} — retrying`);
+    setTimeout(() => {
+      if (!win.isDestroyed()) void win.loadURL(BACKEND_URL);
+    }, RELOAD_AFTER);
+  });
+
+  await win.loadURL(BACKEND_URL);
   return win;
 }
 
@@ -121,7 +128,7 @@ async function focusWindow(): Promise<void> {
     if (win.isMinimized()) win.restore();
     win.show();
     win.focus();
-  } else if (host) {
+  } else {
     await createWindow();
   }
 }
@@ -130,14 +137,9 @@ async function focusWindow(): Promise<void> {
 
 const nagFilePath = () => resolve(app.getPath("userData"), "bank-reminder.json");
 
-// Typed tRPC client against the in-process collector (same contract the SPA
-// consumes — AppRouter is the wire type, nothing hand-written). Created lazily
-// so it can point at whatever origin the host booted on.
-let trpc: ReturnType<typeof createTRPCClient<AppRouter>> | null = null;
-const client = (baseUrl: string) =>
-  (trpc ??= createTRPCClient<AppRouter>({
-    links: [httpBatchLink({ url: new URL("/api", baseUrl).href })],
-  }));
+// Typed tRPC client against the backend — the same contract the SPA consumes
+// (AppRouter is the wire type, nothing hand-written).
+const trpc = createTRPCClient<AppRouter>({ links: [httpBatchLink({ url: API_URL })] });
 
 /** German day phrase for the notification body (UI strings are de-DE). */
 function daysPhrase(ms: number): string {
@@ -146,9 +148,8 @@ function daysPhrase(ms: number): string {
 }
 
 async function checkBankReminder(): Promise<void> {
-  if (!host) return;
   try {
-    const { bank } = await client(host.url).state.query();
+    const { bank } = await trpc.state.query();
     const syncedAt = bank.syncedAt;
     const now = Date.now();
     const stale = syncedAt === null || now - syncedAt > REMIND_AFTER;
@@ -175,7 +176,8 @@ async function checkBankReminder(): Promise<void> {
     console.log(`[reminder] bank stale (syncedAt=${syncedAt ?? "never"}) — notification shown`);
     await writeFile(nagFilePath(), JSON.stringify({ lastNagged: now }));
   } catch (err) {
-    // The reminder is best-effort: never let it disturb the app.
+    // Best-effort: never let it disturb the app. A Mac off the tailnet is the
+    // ordinary failure here, not an error worth surfacing.
     console.warn("[reminder] check failed:", err instanceof Error ? err.message : String(err));
   }
 }
@@ -195,14 +197,7 @@ async function boot(): Promise<void> {
     app.setLoginItemSettings({ openAtLogin: true });
   }
 
-  host = await startCollectorHost({
-    host: HOST,
-    port: PORT,
-    dbPath: resolve(app.getPath("userData"), "collector.db"),
-    distDir,
-    backendDir,
-  });
-  await waitForHealth(host.url);
+  console.log(`[main] agent up — backend at ${BACKEND_URL}`);
   await createWindow();
 
   // Reminder cadence: at boot, hourly, and on wake from sleep (a laptop that
@@ -224,16 +219,8 @@ app.on("activate", () => void focusWindow());
 
 // macOS convention: closing the window keeps the app (and the reminder timer)
 // alive in the dock; Cmd-Q quits. Quitting on close would silently disable the
-// reminder duty this shell now carries.
+// reminder duty this shell carries. Nothing to tear down on quit any more — the
+// agent owns no server, no store and no sidecar.
 app.on("window-all-closed", () => {
   if (process.platform !== "darwin") app.quit();
-});
-
-app.on("will-quit", (e) => {
-  if (host) {
-    e.preventDefault();
-    const h = host;
-    host = null;
-    void h.close().then(() => app.quit());
-  }
 });

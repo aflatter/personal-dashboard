@@ -1,9 +1,16 @@
-# Packaging config (electron-builder). Run via `pnpm package` — it stages
-# .build/resources first (scripts/stage-resources.ts), which this file ships as
-# Contents/Resources/{backend,dist,secretspec.toml}.
+# Packaging config (electron-builder). Run via `pnpm package` — it builds
+# .build/app first (scripts/stage-resources.ts): the main process bundled to one
+# ESM file plus the preload, which is the app's entire payload.
 #
-# - asar: false — the main process is raw .ts run via Electron's Node
-#   type-stripping (same as dev); real files keep that path identical.
+# Nothing else ships. The Mac app is an agent, not a server: the backend, the
+# store and the SPA live in k3s (docs/multi-device-sync-briefing.md §7.3), so
+# there are no extraResources, no collector deps and no native modules here.
+#
+# - extraMetadata.main repoints the packaged package.json at the bundle, while
+#   the checked-in "main" stays src/main.ts so `pnpm start` runs the TypeScript
+#   directly via Electron's type-stripping (no build step in dev).
+# - asar: true is safe now that everything is one bundled .js — the old
+#   asar: false existed because raw .ts and a native .node needed real files.
 # - productName lives HERE only, not in package.json: Electron derives the
 #   userData dir from package.json "name", so the packaged app keeps reusing
 #   ~/Library/Application Support/@dash/desktop-electron (data continuity
@@ -16,20 +23,13 @@ electronLanguages: [de, en]
 directories:
   output: .build/out
 files:
-  - src/**/*
+  - .build/app/**
   - package.json
-asar: false
+extraMetadata:
+  main: .build/app/main.js
+asar: true
 npmRebuild: false
-# One fileset for ALL of .build/resources, deliberately rooted one level ABOVE
-# the backend: electron-builder's copy filter hard-rejects a node_modules
-# directory at the ROOT of a fileset (app-builder-lib util/filter.js — builder
-# manages the app's own deps and refuses to glob-copy a root node_modules),
-# but explicitly allows nested ones. With this root, the deployed backend's
-# deps live at backend/node_modules — nested, so they ship intact (the
-# afterPack hook asserts it).
 afterPack: scripts/after-pack.cjs
-extraResources:
-  - from: .build/resources
 mac:
   # Bundle icon (Finder/Dock of the installed .app). Master lives at
   # resources/icon/pulse-icon.svg; icon.icns is generated from Pulse.iconset via
