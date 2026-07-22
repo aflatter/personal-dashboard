@@ -22,7 +22,8 @@ manifests. See `docs/multi-device-sync-briefing.md` §7 for the full design.
 - `../Dockerfile` — the backend image (Node 26 type-strips the .ts sources; only
   the SPA is built). Served same-origin: SPA at `/`, tRPC at `/api`, `/health`.
 - `k8s/` — applied in order: namespace → PVC → Deployment → Service → Ingress.
-- `secret.example.yaml` — template for the app secret (NOT applied; not real values).
+- `apply-secrets.sh` — builds the cluster Secrets from secretspec-injected env
+  vars (stdin only, never argv). Driven by `just secrets`, not run directly.
 - `../justfile` — `build` / `push` / `deploy` / `smoke`.
 
 ## One-time setup
@@ -33,20 +34,37 @@ manifests. See `docs/multi-device-sync-briefing.md` §7 for the full design.
    docker login forgejo.tev.im
    ```
 
-2. **Image pull secret** in the namespace (so k3s can pull the private image).
-   Create the namespace first, then the secret:
+2. **Forgejo pull token** — k8s authenticates to the registry with an
+   `imagePullSecret`; without it the pull falls back to anonymous and Forgejo
+   answers `401` (`ImagePullBackOff`). The Mac's `~/.docker/config.json` can't be
+   reused: it uses the `osxkeychain` helper, so it holds a keychain pointer, not a
+   credential.
+
+   Create the token in Forgejo (User Settings → Applications → Access Tokens,
+   scope **`read:package`** — pull-only, not your password), then store it in
+   1Password via secretspec:
+
+   ```sh
+   just registry-token     # prompts, writes to the vault (deploy profile)
+   ```
+
+3. **Create the cluster Secrets** from 1Password — the namespace must exist first:
 
    ```sh
    kubectl apply -f deploy/k8s/00-namespace.yaml
-   kubectl -n personal-dashboard create secret docker-registry forgejo-registry \
-     --docker-server=forgejo.tev.im \
-     --docker-username=<robot-user> \
-     --docker-password=<robot-token>
+   just secrets            # forgejo-registry + dashboard-secrets
    ```
 
-3. **App secret** (Fastmail + Toggl) from 1Password — see `secret.example.yaml`
-   for the exact `kubectl create secret generic dashboard-secrets …` command.
-   `MONEYMONEY_ACCOUNT` is deliberately absent (MoneyMoney runs only on the Mac).
+   `just secrets` is idempotent, so it is also how you **rotate**: update the
+   value in 1Password and re-run it, then `just restart`.
+
+**On secret handling.** 1Password is the single source of truth for both, reached
+through the same `secretspec` used at runtime — the deploy-only token lives in a
+separate `deploy` profile so the collector never resolves it. `secretspec run`
+injects values as environment variables, and `deploy/apply-secrets.sh` passes
+them to `kubectl` on **stdin only** — never as command-line arguments, since argv
+is readable by any local process via `ps`. `MONEYMONEY_ACCOUNT` is never sent to
+the cluster (MoneyMoney runs only on the Mac agent).
 
 ## Deploy
 

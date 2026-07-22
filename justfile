@@ -27,6 +27,21 @@ deploy: push
     kubectl -n {{namespace}} set image deployment/dashboard-backend backend={{image}}:{{tag}}
     kubectl -n {{namespace}} rollout status deployment/dashboard-backend
 
+# Store the Forgejo pull token in 1Password (prompts; nothing hits the shell
+# history). Create the token in Forgejo first: User Settings → Applications →
+# Access Tokens, scope `read:package` — pull-only, not your password.
+registry-token:
+    secretspec set -P deploy FORGEJO_REGISTRY_TOKEN
+
+# Create/update both cluster Secrets from 1Password via secretspec. Idempotent,
+# so this is also how you rotate. Values are injected as env vars and passed to
+# kubectl on stdin — never as arguments (argv is readable via `ps`).
+secrets:
+    NAMESPACE={{namespace}} REGISTRY={{registry}} OWNER={{owner}} \
+      secretspec run -P deploy -- deploy/apply-secrets.sh registry
+    NAMESPACE={{namespace}} REGISTRY={{registry}} OWNER={{owner}} \
+      secretspec run -- deploy/apply-secrets.sh app
+
 # E2E smoke: from a device with Tailscale on, /health must be 204 over HTTPS.
 smoke:
     @printf 'GET %s/health -> ' '{{url}}'
