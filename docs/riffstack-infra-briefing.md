@@ -1,5 +1,28 @@
 # Riffstack infra briefing — Tailscale + k3s platform for the personal dashboard
 
+> **Status: DONE — do not re-do this work.** The platform side is complete and
+> live. The Tailscale Kubernetes operator is installed, the ACL is applied, and
+> MagicDNS + HTTPS certificates are enabled on the tailnet. The app is deployed
+> against it and the §7 end-to-end smoke passes: `/health` returns **204** with a
+> valid certificate over the tailnet (`just smoke` in the app repo).
+>
+> **The five constants are frozen** — these, not the placeholders used as
+> examples in §4, are the real values:
+>
+> | Constant        | Value                        |
+> | --------------- | ---------------------------- |
+> | `namespace`     | `personal-dashboard`         |
+> | `tailnetDomain` | `braid-stargazer.ts.net`     |
+> | `serviceTag`    | `tag:svc-personal-dashboard` |
+> | `storageClass`  | `local-path`                 |
+> | `registryHost`  | `forgejo.tev.im`             |
+>
+> URL: `https://personal-dashboard.braid-stargazer.ts.net`. The app repo consumes
+> these as literals in `deploy/k8s/` and the `justfile` rather than via Pulumi
+> stack references. The rest of this document is kept as the record of what was
+> asked for and why; read §§2–8 as history, and the §8 open questions as answered
+> by the table above.
+
 **Audience:** the agent/session working in the **Riffstack** infra repo (Pulumi
 IaC). You do **not** need the `personal-dashboard` app repo to do this work — this
 briefing is self-contained. It is the platform half of a two-repo split; the app
