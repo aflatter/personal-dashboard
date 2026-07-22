@@ -43,6 +43,9 @@ import { backendUrl, loadHostConfig } from "./host-config.ts";
 
 const here = fileURLToPath(new URL(".", import.meta.url));
 const preloadPath = resolve(here, "preload.js");
+// Local fallback page for when the backend can't be reached. Like preload.js it
+// is staged next to the bundle, so this one path is right in dev and packaged.
+const offlinePath = resolve(here, "offline.html");
 // Dev-only Dock icon. The packaged .app carries its icon in the bundle (the
 // .icns wired via electron-builder.yml → mac.icon); a bare `pnpm start` runs the
 // node_modules Electron binary, which would otherwise show the generic Electron
@@ -63,6 +66,12 @@ const NAG_AT_MOST_EVERY = Number(process.env.BANK_REMIND_NAG_MS ?? DAY);
 // The backend is tailnet-only, so a Mac off the tailnet (or a pod mid-rollout)
 // simply can't load the UI. Retry rather than parking on a Chromium error page.
 const RELOAD_AFTER = Number(process.env.DASHBOARD_RETRY_MS ?? 15_000);
+// Ceiling for the retry backoff — a lid closed overnight shouldn't mean a failed
+// load every 15s until morning, but the wait after a reconnect stays tolerable.
+const MAX_RETRY_AFTER = Number(process.env.DASHBOARD_RETRY_MAX_MS ?? 2 * 60_000);
+// Reachability probe budget. Short: this only decides whether to navigate, and a
+// tailnet that needs longer than this is "not up yet" for our purposes.
+const HEALTH_TIMEOUT = Number(process.env.DASHBOARD_HEALTH_TIMEOUT_MS ?? 5_000);
 
 // One instance only: a login-item app relaunched by hand should focus the
 // existing window, not double-notify.
@@ -158,18 +167,107 @@ async function createWindow(): Promise<BrowserWindowType> {
     return { action: "deny" };
   });
 
-  // Offline / backend down / tailnet asleep: keep retrying quietly. Ignore -3
-  // (ABORTED), which a navigation superseded by our own reload reports.
+  // A load that fails *after* a healthy probe — the backend went away mid-session,
+  // or the user hit the offline page's retry button at the wrong moment. Ignore
+  // -3 (ABORTED), which a navigation superseded by our own reload reports.
   win.webContents.on("did-fail-load", (_event, code, description, url, isMainFrame) => {
     if (!isMainFrame || code === -3) return;
-    console.warn(`[main] load failed (${code} ${description}) for ${url} — retrying`);
-    setTimeout(() => {
-      if (!win.isDestroyed()) void win.loadURL(BACKEND_URL);
-    }, RELOAD_AFTER);
+    console.warn(`[main] load failed (${code} ${description}) for ${url}`);
+    void showOffline(win);
+    scheduleRetry(win);
   });
-
-  await win.loadURL(BACKEND_URL);
+  await openDashboard(win);
   return win;
+}
+
+// --- Reachability -------------------------------------------------------------
+
+// The tailnet is not always there — a closed lid, a café without the VPN, a pod
+// mid-rollout — so being unable to load the dashboard is an ordinary state, not
+// a failure. Retry with a capped backoff and say so in the window meanwhile.
+let retryTimer: ReturnType<typeof setTimeout> | null = null;
+let attempt = 0;
+
+/** Is the backend answering right now? Cheap, unauthenticated, no navigation. */
+async function backendReachable(): Promise<boolean> {
+  try {
+    const res = await fetch(new URL("/health", BACKEND_URL), {
+      signal: AbortSignal.timeout(HEALTH_TIMEOUT),
+      cache: "no-store",
+    });
+    return res.status === 204 || res.ok;
+  } catch {
+    return false; // off the tailnet, DNS, refused, timeout — all the same answer
+  }
+}
+
+/**
+ * Show the dashboard if the backend is up, else the local offline page.
+ *
+ * The health probe comes first deliberately: navigating to an unreachable URL
+ * makes Chromium commit its own error page under that URL, which would flash on
+ * every retry before we could swap ours in. Probing keeps the window on the
+ * offline page until there is something real to show.
+ *
+ * It also tolerates failure. `loadURL` REJECTS when the navigation fails, and
+ * boot() awaited it unguarded — so launching while off the tailnet (the
+ * login-item case: the app starts before Tailscale is up) took the whole app
+ * down with "boot failed".
+ */
+async function openDashboard(win: BrowserWindowType): Promise<void> {
+  if (win.isDestroyed()) return;
+  if (!(await backendReachable())) {
+    await showOffline(win);
+    scheduleRetry(win);
+    return;
+  }
+  try {
+    await win.loadURL(BACKEND_URL);
+    if (attempt > 0) console.log(`[main] dashboard loaded (after ${attempt} failed attempt(s))`);
+    // The backend really answered, so start the backoff over: the next outage
+    // then retries briskly instead of at the last one's long delay.
+    attempt = 0;
+  } catch (err) {
+    console.warn("[main] navigation failed after a healthy probe:", err);
+    await showOffline(win);
+    scheduleRetry(win);
+  }
+}
+
+/** Swap in the local "not reachable" page (the backend URL rides in the hash). */
+async function showOffline(win: BrowserWindowType): Promise<void> {
+  if (win.isDestroyed()) return;
+  try {
+    await win.loadFile(offlinePath, { hash: encodeURIComponent(BACKEND_URL) });
+  } catch (err) {
+    console.warn("[main] offline page failed to load:", err);
+  }
+}
+
+function scheduleRetry(win: BrowserWindowType): void {
+  if (retryTimer) return; // one in flight is enough
+  attempt += 1;
+  // 15s, 30s, 60s, … capped: a laptop can be away for hours, and there is no
+  // point waking every 15s all night to fail again.
+  const delay = Math.min(RELOAD_AFTER * 2 ** (attempt - 1), MAX_RETRY_AFTER);
+  console.log(`[main] retrying in ${Math.round(delay / 1000)}s`);
+  retryTimer = setTimeout(() => {
+    retryTimer = null;
+    if (!win.isDestroyed()) void openDashboard(win);
+  }, delay);
+}
+
+/** Retry now, whatever the backoff said — for events that change reachability. */
+function retryNow(): void {
+  const win = BrowserWindow.getAllWindows()[0];
+  if (!win || win.isDestroyed()) return;
+  if (win.webContents.getURL().startsWith(BACKEND_URL)) return; // already there
+  if (retryTimer) {
+    clearTimeout(retryTimer);
+    retryTimer = null;
+  }
+  attempt = 0;
+  void openDashboard(win);
 }
 
 async function focusWindow(): Promise<void> {
@@ -254,7 +352,12 @@ async function boot(): Promise<void> {
   // sleeps through the hourly timer still gets checked promptly).
   void checkBankReminder();
   setInterval(() => void checkBankReminder(), REMIND_CHECK_EVERY);
-  powerMonitor.on("resume", () => void checkBankReminder());
+  powerMonitor.on("resume", () => {
+    // Waking is the moment reachability most often changes (the lid was shut
+    // somewhere else entirely), so don't sit out the rest of the backoff.
+    retryNow();
+    void checkBankReminder();
+  });
 }
 
 app

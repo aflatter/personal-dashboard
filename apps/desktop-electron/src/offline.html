@@ -1,0 +1,107 @@
+<!doctype html>
+<!--
+  Shown instead of a blank Chromium error page when the backend can't be reached
+  — the Mac being off the tailnet is an ordinary, temporary state for a laptop,
+  not an error worth alarming about. The main process keeps retrying on its own
+  (see main.ts); this page only explains and offers to retry now.
+
+  Deliberately standalone: no build step, no assets, no fonts to fetch (a page
+  about having no network must not need the network). The backend URL arrives in
+  the location hash, so the file itself stays static.
+-->
+<html lang="de">
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'"
+    />
+    <title>Personal Dashboard</title>
+    <style>
+      :root {
+        color-scheme: light; /* the dashboard is light-only by design */
+      }
+      body {
+        margin: 0;
+        height: 100vh;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: #faf9f7;
+        color: #2f2e2b;
+        font:
+          15px/1.5 -apple-system,
+          BlinkMacSystemFont,
+          "SF Pro Text",
+          system-ui,
+          sans-serif;
+        -webkit-user-select: none;
+        user-select: none;
+      }
+      main {
+        max-width: 30rem;
+        padding: 0 2rem;
+        text-align: center;
+      }
+      h1 {
+        font-size: 17px;
+        font-weight: 600;
+        margin: 0 0 0.5rem;
+      }
+      p {
+        margin: 0 0 0.5rem;
+        color: #6e6d68;
+        font-size: 13px;
+      }
+      code {
+        font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+        font-size: 12px;
+        color: #6e6d68;
+        overflow-wrap: anywhere;
+      }
+      button {
+        margin-top: 1.25rem;
+        font: inherit;
+        font-size: 13px;
+        color: #2f2e2b;
+        background: #f4f1eb;
+        border: 0;
+        border-radius: 999px;
+        padding: 7px 16px;
+        cursor: pointer;
+      }
+      button:hover {
+        background: #ebe7df;
+      }
+      #next {
+        margin-top: 0.75rem;
+        font-size: 12px;
+        color: #959daa;
+        height: 1.2em; /* reserve the line so the layout doesn't jump */
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>Dashboard nicht erreichbar</h1>
+      <p>
+        Keine Verbindung zum Backend. Meist heißt das: Tailscale ist nicht aktiv, oder der Dienst
+        startet gerade neu.
+      </p>
+      <p><code id="url"></code></p>
+      <button id="retry" type="button">Erneut versuchen</button>
+      <p id="next"></p>
+    </main>
+    <script>
+      // The main process passes the backend URL in the hash so this file needs
+      // no templating. Navigating there is allowed by the navigation guard
+      // (same origin as the backend); anything else it would block.
+      const target = decodeURIComponent(location.hash.slice(1));
+      document.getElementById("url").textContent = target;
+      document.getElementById("retry").addEventListener("click", () => {
+        document.getElementById("next").textContent = "Verbinde…";
+        location.href = target;
+      });
+    </script>
+  </body>
+</html>

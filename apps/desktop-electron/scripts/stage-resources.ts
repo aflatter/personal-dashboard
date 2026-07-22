@@ -1,9 +1,10 @@
 // Builds what the packaged .app ships (run before electron-builder — `pnpm
 // package` chains both):
 //
-//   .build/app/main.js      the Electron main process, bundled to one ESM file
-//   .build/app/preload.js   copied verbatim (plain CJS, loaded by Electron's own
-//                           CJS loader, so it is never bundled)
+//   .build/app/main.js       the Electron main process, bundled to one ESM file
+//   .build/app/preload.js    copied verbatim (plain CJS, loaded by Electron's
+//                            own CJS loader, so it is never bundled)
+//   .build/app/offline.html  the local "backend not reachable" page
 //
 // That is the whole payload. The app is an *agent*: it collects MoneyMoney on
 // this Mac and pushes it to the backend in k3s, which serves the SPA and owns the
@@ -57,5 +58,9 @@ if (!existsSync(bundle)) throw new Error(`bundle missing: ${bundle}`);
 // loader — it must stay a standalone file next to main.js (main.ts resolves it
 // relative to its own directory, which is true in dev and here alike).
 copyFileSync(resolve(appDir, "src/preload.js"), resolve(outDir, "preload.js"));
+
+// The offline page is loaded from disk by path, not imported, so it is copied
+// rather than bundled — same reasoning as the preload.
+copyFileSync(resolve(appDir, "src/offline.html"), resolve(outDir, "offline.html"));
 
 console.log(`\n✓ .build/app ready (main.js ${(statSync(bundle).size / 1024).toFixed(0)} kB)\n`);
