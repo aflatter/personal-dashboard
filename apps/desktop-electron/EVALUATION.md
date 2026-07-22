@@ -5,7 +5,9 @@
 > **in-process** and shipped a pnpm-deployed backend + SPA build inside the
 > bundle. Now that the backend runs in k3s, the Mac app is only the **push agent**
 > plus a window on the backend-served SPA (docs/multi-device-sync-briefing.md
-> §7.3): `collector-host.ts` is gone, nothing is staged into `Contents/Resources`,
+> §7.3): `collector-host.ts` and `probe.ts` are gone (the probe asserted
+> `node:sqlite` + the secretspec addon, neither of which the app touches now),
+> nothing is staged into `Contents/Resources`,
 > secretspec is no longer used here, and the main process is **bundled** to one
 > `.js` (Node refuses to type-strip under `node_modules`, which any copied
 > `@dash/*` would be). The findings below about Electron itself — `node:sqlite`,

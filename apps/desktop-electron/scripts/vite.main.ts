@@ -1,6 +1,5 @@
 // Vite config for the Electron main-process bundle, run through the workspace's
-// `vp` (see stage-resources.ts) — this app is outside the workspace and has no
-// bundler of its own.
+// `vp` (see stage-resources.ts) — this app has no bundler of its own.
 //
 // One ESM file, no runtime dependencies: `@dash/agent` + `@dash/collector` are
 // inlined from source, `electron` and the node: builtins stay external (the
@@ -20,9 +19,10 @@ const appDir = resolve(here, "..");
 const repoRoot = resolve(appDir, "../..");
 
 export default {
-  // Rooted at the repo, so the workspace's node_modules resolve while bundling
-  // packages/agent + packages/collector (the app itself is installed with
-  // --ignore-workspace and has no @dash deps of its own).
+  // Rooted at the repo so `vp` resolves its own toolchain while bundling the
+  // @dash/* sources. The app declares those as workspace deps, so they would
+  // also resolve with the app as root; repo root simply keeps one resolution
+  // origin for everything the bundle pulls in.
   root: repoRoot,
   build: {
     outDir: resolve(appDir, ".build/app"),

@@ -36,9 +36,9 @@ import type { BrowserWindow as BrowserWindowType } from "electron";
 import { readFile, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import type { AppRouter } from "../../../packages/backend/src/index.ts";
-import { bankCollector, bankPusher, createBankAgent } from "../../../packages/agent/src/index.ts";
-import type { BankAgent, RefreshResult } from "../../../packages/agent/src/index.ts";
+import type { AppRouter } from "@dash/backend";
+import { bankCollector, bankPusher, createBankAgent } from "@dash/agent";
+import type { BankAgent, RefreshResult } from "@dash/agent";
 import { backendUrl, loadHostConfig } from "./host-config.ts";
 
 const here = fileURLToPath(new URL(".", import.meta.url));
@@ -78,7 +78,7 @@ app.on("second-instance", () => void focusWindow());
 // (an IBAN selector, not a credential), so it comes from the host config file —
 // no secretspec, no 1Password, no native addon in this app.
 const agent: BankAgent = createBankAgent({
-  collect: bankCollector({ moneyMoneyAccount: config.moneyMoneyAccount }),
+  collect: bankCollector({ account: config.moneyMoneyAccount }),
   push: bankPusher(API_URL),
 });
 

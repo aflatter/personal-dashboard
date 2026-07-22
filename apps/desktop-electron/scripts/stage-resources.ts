@@ -37,11 +37,9 @@ console.log("▶ building the packaged app's main process\n");
 rmSync(outDir, { recursive: true, force: true });
 mkdirSync(outDir, { recursive: true });
 
-// Bundled from the REPO ROOT, not from apps/desktop-electron: the desktop app is
-// deliberately outside the pnpm workspace (`--ignore-workspace`, so Electron
-// never touches the root lockfile), and main.ts reaches the agent by relative
-// path. Rolling it up from the root lets `@dash/collector`'s bare specifiers
-// resolve through the workspace's own node_modules.
+// Bundled from the REPO ROOT, not from apps/desktop-electron, so that one
+// resolution origin covers both `vp`'s own toolchain and the `@dash/*` sources
+// the bundle inlines.
 // Through `vp` (the workspace's toolchain) rather than a bare `vite` binary:
 // vite is only a transitive dependency here, so its hoisted bin is not ours to
 // rely on — `vp build` takes the same --config and is the project's declared

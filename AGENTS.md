@@ -140,11 +140,12 @@ Rules:
   composition point; `main.ts` and the desktop shell are thin consumers.
 - Functional components + hooks only. **Composition over inheritance.**
 
-## apps/ — the Mac app (outside the workspace)
+## apps/ — the Mac app
 
-`apps/desktop-electron/` is the macOS Electron app (a standalone pnpm root:
-install with `pnpm install --ignore-workspace`; its own `tsc --noEmit` is the
-typecheck — root `vp run -r` does not cover it). Two roles, one app: the main
+`apps/desktop-electron/` is the macOS Electron app, a normal workspace member
+(`apps/*`): one root `pnpm install`, and root `vp run -r` covers its typecheck
+like any package. It depends on `@dash/agent` / `@dash/backend` via
+`workspace:*` — never by relative path into `packages/`. Two roles, one app: the main
 process is the **push agent** (`@dash/agent` — MoneyMoney collected locally,
 POSTed to `pushBankBacklog`), the renderer is a **thin loader** for the SPA the
 backend serves. Boundaries:

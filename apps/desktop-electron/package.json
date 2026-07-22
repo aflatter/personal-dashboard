@@ -2,18 +2,20 @@
   "name": "@dash/desktop-electron",
   "version": "0.1.0",
   "private": true,
-  "description": "The Mac app: MoneyMoney push agent + a window on the k3s-served dashboard (macOS-only). Not part of the pnpm workspace.",
+  "description": "The Mac app: MoneyMoney push agent + a window on the k3s-served dashboard (macOS-only).",
   "author": "Alexander Flatter",
   "type": "module",
   "main": "src/main.ts",
   "scripts": {
-    "probe": "electron src/probe.ts",
     "start": "electron .",
     "stage": "node scripts/stage-resources.ts",
     "package": "node scripts/stage-resources.ts && electron-builder --mac --arm64",
     "typecheck": "tsc --noEmit"
   },
   "devDependencies": {
+    "@dash/agent": "workspace:*",
+    "@dash/backend": "workspace:*",
+    "@electron/asar": "^3.4.1",
     "@trpc/client": "^11.0.0",
     "@trpc/server": "^11.0.0",
     "@types/node": "^24.7.0",

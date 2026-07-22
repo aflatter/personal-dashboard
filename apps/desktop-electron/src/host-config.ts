@@ -6,8 +6,8 @@
 // one piece of local configuration the MoneyMoney source needs. Neither value is
 // a secret — the account selector is an IBAN, not a credential — so there is no
 // secretspec, no 1Password, and no `op` on PATH involved here. (The backend's
-// real secrets live in the cluster; `MONEYMONEY_ACCOUNT` is deliberately never
-// sent there, since MoneyMoney only exists on this Mac.)
+// real secrets live in the cluster; nothing MoneyMoney-related is sent there,
+// since MoneyMoney only exists on this Mac.)
 //
 // Deliberately tiny and fully optional: a missing or malformed file yields `{}`
 // and the defaults below apply. This is NOT the dashboard's user settings

@@ -1,2 +1,18 @@
 packages:
   - packages/*
+  - apps/*
+
+# Build scripts are opt-in. pnpm 11 refuses to finish an install
+# (ERR_PNPM_IGNORED_BUILDS) until every flagged package has an explicit decision
+# recorded here, so both entries are load-bearing even though both are `false` —
+# dropping either one breaks `pnpm install` rather than silently changing it.
+allowBuilds:
+  # Electron ships no install script as of v43 (its package.json has no
+  # `scripts` at all) but pnpm still asks about it. Nothing is lost by saying no:
+  # the dev binary is downloaded lazily by electron's own index.js on the first
+  # `electron .`, and electron-builder fetches its own copy when packaging.
+  # Both land in ~/Library/Caches/electron, so this stays a one-time cost.
+  electron: false
+  # Windows-only electron-builder dependency (it selects a 7-Zip arch); this
+  # project is macOS-only, so the script is never wanted.
+  electron-winstaller: false
