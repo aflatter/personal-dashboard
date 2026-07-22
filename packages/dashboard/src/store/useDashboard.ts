@@ -5,6 +5,7 @@ import {
   fetchState,
   markRentDone,
   markTaxDone,
+  refreshBankThroughAgent,
   requestSync,
   saveSettings,
   subscribeState,
@@ -129,21 +130,15 @@ export function useDashboard() {
   // inbox refresh. On success we re-read state rather than trust the round trip;
   // the live subscription would deliver it too, just a beat later.
   const syncBank = useCallback(() => {
-    const agent = dashboardAgent();
-    if (!agent || bankSyncingRef.current) return;
+    if (!dashboardAgent() || bankSyncingRef.current) return;
     bankSyncingRef.current = true;
     setBankSyncing(true);
     setBankError(null);
-    agent
-      .refreshBank()
-      .then((result) => {
-        if (!result.ok) {
-          setBankError(result.error);
-          return;
-        }
-        return fetchState().then(apply);
+    refreshBankThroughAgent()
+      .then(({ state: fresh, error }) => {
+        setBankError(error);
+        if (fresh) apply(fresh);
       })
-      .catch((err: unknown) => setBankError(err instanceof Error ? err.message : String(err)))
       .finally(() => {
         bankSyncingRef.current = false;
         setBankSyncing(false);

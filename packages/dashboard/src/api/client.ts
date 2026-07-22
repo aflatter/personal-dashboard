@@ -95,6 +95,43 @@ declare global {
 }
 
 /** The agent bridge if this device has one (the Mac app), else null. */
-export function dashboardAgent(): DashboardAgent | null {
-  return typeof window === "undefined" ? null : (window.dashboardAgent ?? null);
+export function dashboardAgent(
+  win: { dashboardAgent?: DashboardAgent } | undefined = globalThis.window,
+): DashboardAgent | null {
+  return win?.dashboardAgent ?? null;
+}
+
+/** What one bank refresh produced: fresh state, or the reason it didn't land. */
+export interface BankRefresh {
+  /** Set only when the push succeeded and the re-read came back. */
+  state?: DashboardState;
+  /** Human-facing failure, else null. */
+  error: string | null;
+}
+
+/**
+ * Run one bank refresh through the Mac agent: it collects MoneyMoney locally and
+ * pushes to the backend, so a failure here is a *local* condition (MoneyMoney
+ * locked, no Automation grant) rather than a backend error — hence it is
+ * reported, not thrown, and never marks the app offline.
+ *
+ * On success we re-read state instead of trusting the round trip; the live
+ * subscription would deliver it too, just a beat later. On failure we
+ * deliberately do NOT re-read: nothing was pushed, so the state is unchanged and
+ * a fetch would only add a second way to fail.
+ *
+ * Dependencies are injected so this stays testable without a DOM.
+ */
+export async function refreshBankThroughAgent(
+  agent: DashboardAgent | null = dashboardAgent(),
+  refetch: () => Promise<DashboardState> = fetchState,
+): Promise<BankRefresh> {
+  if (!agent) return { error: null }; // not the Mac — the control isn't offered
+  try {
+    const result = await agent.refreshBank();
+    if (!result.ok) return { error: result.error };
+    return { state: await refetch(), error: null };
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : String(err) };
+  }
 }
