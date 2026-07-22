@@ -30,6 +30,14 @@ describe("mapOsascriptError", () => {
     );
   });
 
+  it("maps an empty stderr (osascript killed — timeout on the TCC prompt) to the prompt hint", () => {
+    const want = "MoneyMoney did not respond — allow the Automation prompt, then sync again";
+    expect(mapOsascriptError("")).toBe(want);
+    expect(mapOsascriptError("  \n ")).toBe(want);
+    // A timeout kill leaves only the prefix behind, which distils to nothing.
+    expect(mapOsascriptError("execution error: ")).toBe(want);
+  });
+
   it("keeps only the last line of a multi-line fallback stderr", () => {
     expect(mapOsascriptError("osascript stack trace\nexecution error: broke")).toBe(
       "MoneyMoney sync failed: broke",

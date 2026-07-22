@@ -39,7 +39,14 @@ export function mapOsascriptError(stderr: string): string {
     return "MoneyMoney control not permitted — grant Automation access in System Settings";
   if (/-600|not running|isn't running/i.test(stderr)) return "MoneyMoney is not running";
   const last = stderr.trim().split("\n").pop() ?? stderr.trim();
-  return `MoneyMoney sync failed: ${last.replace(/^execution error:\s*/i, "").trim()}`;
+  const detail = last.replace(/^execution error:\s*/i, "").trim();
+  // Nothing on stderr means osascript was killed rather than answered — in
+  // practice the poll's timeout firing while an Apple event waits on a macOS
+  // Automation consent dialog (a fresh build has no grant yet, and the dialog
+  // blocks until someone clicks). "sync failed: " with an empty tail told the
+  // user nothing; name the likely cause instead.
+  if (!detail) return "MoneyMoney did not respond — allow the Automation prompt, then sync again";
+  return `MoneyMoney sync failed: ${detail}`;
 }
 
 export interface MoneyMoneyConfig {
