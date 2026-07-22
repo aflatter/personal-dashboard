@@ -25,7 +25,7 @@
   # that dependency. MoneyMoney is not polled here — it syncs on-demand via the
   # bank card's ↺ button (the backend's `syncBank` mutation).
   processes.backend = {
-    exec = "COLLECTOR_PORT=${toString config.processes.backend.ports.http.value} node packages/backend/src/main.ts";
+    exec = "SECRETSPEC_PROFILE=backend COLLECTOR_PORT=${toString config.processes.backend.ports.http.value} node packages/backend/src/main.ts";
     ports.http.allocate = 4319;
     ready = {
       http.get = {

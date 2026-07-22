@@ -62,7 +62,11 @@ export function loadSecrets(): Secrets {
 
     let builder = SecretSpec.builder()
       .withPath(TOML_PATH)
-      .withProfile(process.env.SECRETSPEC_PROFILE ?? "default")
+      // Profiles are per-deployable (see secretspec.toml): `backend` = the
+      // runtime credentials this loader serves, `app` = the Mac agent's
+      // MONEYMONEY_ACCOUNT, `deploy` = deploy-only. There is no `default`
+      // profile, so callers that need another one must set SECRETSPEC_PROFILE.
+      .withProfile(process.env.SECRETSPEC_PROFILE ?? "backend")
       .withReason("personal-dashboard collector");
     // Provider comes from `secretspec config` (global) unless overridden here.
     const provider = process.env.SECRETSPEC_PROVIDER;

@@ -38,9 +38,9 @@ registry-token:
 # kubectl on stdin — never as arguments (argv is readable via `ps`).
 secrets:
     NAMESPACE={{namespace}} REGISTRY={{registry}} OWNER={{owner}} \
-      secretspec run -P deploy -- deploy/apply-secrets.sh registry
+      secretspec run --profile deploy -- deploy/apply-secrets.sh registry
     NAMESPACE={{namespace}} REGISTRY={{registry}} OWNER={{owner}} \
-      secretspec run -- deploy/apply-secrets.sh app
+      secretspec run --profile backend -- deploy/apply-secrets.sh backend
 
 # E2E smoke: from a device with Tailscale on, /health must be 204 over HTTPS.
 smoke:
