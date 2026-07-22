@@ -199,12 +199,15 @@ how the data layer evolved. Apply them when adding a source, a mutation, or stat
   environment-specific values (account names, IBANs, ids) out of the repo: declare
   them in `secretspec.toml`/config — and make them required with no hardcoded
   fallback when guessing the wrong entity is worse than not running (the bank's
-  `MONEYMONEY_ACCOUNT` is a required IBAN, not a "Girokonto" default).
+  account selector is an IBAN the Mac app must be given, not a "Girokonto"
+  default; it is config rather than a secret, so it lives in the app's
+  `config.json`, not the vault).
 - **Single-flight expensive or side-effecting calls.** Concurrent triggers must
   coalesce into one run — a client-side in-flight ref (`bankSyncing` in
-  `store/useDashboard.ts`) plus a server-side coalescer (`syncBankOnce` shares one
-  `bankInFlight` promise). Never spawn parallel subprocess/network calls for the
-  same logical action.
+  `store/useDashboard.ts`) plus a coalescer where the work happens (the Mac
+  agent's `createBankAgent` shares one in-flight refresh, so a double-click can't
+  spawn two osascript runs; `syncInboxesOnce` does the same for inbox polls).
+  Never spawn parallel subprocess/network calls for the same logical action.
 - **Fail per-source, keep last-good, and say why.** A failing poll marks only that
   source `ok:false` via `markSourceError` and keeps its last snapshot; siblings
   keep serving (`scheduler.ts`/`sampling/sampler.ts`). Map low-level errors to
