@@ -1,0 +1,43 @@
+# Packaging config (electron-builder). Run via `pnpm package` — it stages
+# .build/resources first (scripts/stage-resources.ts), which this file ships as
+# Contents/Resources/{backend,dist,secretspec.toml}.
+#
+# - asar: false — the main process is raw .ts run via Electron's Node
+#   type-stripping (same as dev); real files keep that path identical.
+# - productName lives HERE only, not in package.json: Electron derives the
+#   userData dir from package.json "name", so the packaged app keeps reusing
+#   ~/Library/Application Support/@dash/desktop-electron (data continuity
+#   between `pnpm start` and the installed .app).
+# - identity: null — unsigned (local personal install; Gatekeeper only gates
+#   downloaded apps). Developer-ID signing + notarization are a later step.
+appId: com.tevim.personal-dashboard
+productName: Personal Dashboard
+electronLanguages: [de, en]
+directories:
+  output: .build/out
+files:
+  - src/**/*
+  - package.json
+asar: false
+npmRebuild: false
+# One fileset for ALL of .build/resources, deliberately rooted one level ABOVE
+# the backend: electron-builder's copy filter hard-rejects a node_modules
+# directory at the ROOT of a fileset (app-builder-lib util/filter.js — builder
+# manages the app's own deps and refuses to glob-copy a root node_modules),
+# but explicitly allows nested ones. With this root, the deployed backend's
+# deps live at backend/node_modules — nested, so they ship intact (the
+# afterPack hook asserts it).
+afterPack: scripts/after-pack.cjs
+extraResources:
+  - from: .build/resources
+mac:
+  # Bundle icon (Finder/Dock of the installed .app). Master lives at
+  # resources/icon/pulse-icon.svg; icon.icns is generated from Pulse.iconset via
+  # `iconutil` (see resources/icon/README.md). The runtime dev Dock icon is set
+  # separately in src/main.ts — the .icns only covers the packaged bundle.
+  icon: resources/icon/icon.icns
+  target:
+    - target: dir
+      arch: arm64
+  identity: null
+  category: public.app-category.productivity

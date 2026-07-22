@@ -1,8 +1,10 @@
 import type { BankGate } from "@dash/collector/registry";
+import type { Source } from "@dash/collector/sources/port";
 import { pollOnce } from "./sampling/sampler.ts";
 import type { Db } from "./store/db.ts";
 
 let bankInFlight: Promise<void> | null = null;
+let inboxInFlight: Promise<void> | null = null;
 
 /**
  * Poll MoneyMoney once, coalescing concurrent callers into a single osascript
@@ -26,4 +28,24 @@ export function syncBankOnce(db: Db, bank: BankGate, now: number): Promise<void>
     });
   }
   return bankInFlight;
+}
+
+/**
+ * Force a live JMAP fetch of every inbox, on demand — this is what the inbox
+ * "sync" button triggers so a click actually re-reads Fastmail rather than just
+ * re-serving the DB. Push (`Source.watch`) keeps counts fresh in the background;
+ * this is the manual escape hatch for when a user wants an immediate refresh (or
+ * push is asleep). Concurrent callers coalesce into one round of fetches, and
+ * each `pollOnce` is fault-isolated, so one failing account can't throw or block
+ * the other.
+ */
+export function syncInboxesOnce(db: Db, sources: Source[], now: number): Promise<void> {
+  if (!inboxInFlight) {
+    inboxInFlight = Promise.all(sources.map((s) => pollOnce(db, s, now)))
+      .then(() => undefined)
+      .finally(() => {
+        inboxInFlight = null;
+      });
+  }
+  return inboxInFlight;
 }

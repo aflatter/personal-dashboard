@@ -272,6 +272,54 @@ Design decisions worth keeping:
   are env-overridable for testing (`BANK_REMIND_AFTER_MS`, `BANK_REMIND_CHECK_MS`,
   `BANK_REMIND_NAG_MS`).
 
+## Packaging (electron-builder) — done, installed
+
+`pnpm package` produces `.build/out/mac-arm64/Personal Dashboard.app` (~292 MB,
+arm64, unsigned) in two phases: `scripts/stage-resources.ts` (pnpm-deploys the
+collector — flat/hoisted, `.ts` sources + node_modules incl. the secretspec
+`.node`; builds the SPA; copies `secretspec.toml`) then `electron-builder`
+(`electron-builder.yml`). Verified end-to-end from `/Applications`: boots the
+collector in-process on :4390, serves the SPA + tRPC, reuses the existing
+userData DB, quits clean. Unlike Tauri, **no Node runtime ships** — the
+deployed collector runs on Electron's own Node.
+
+Decisions + gotchas (each cost real debugging — don't relearn them):
+
+- **`asar: false`.** The main process stays raw `.ts` (type-stripped by
+  Electron's Node exactly as in dev); real files keep that path identical. A
+  packaged `.ts` main entry works — verified.
+- **`productName` lives only in electron-builder.yml, not package.json.**
+  Electron derives the userData dir from package.json `name`, so the installed
+  app keeps reading `~/Library/Application Support/@dash/desktop-electron/` —
+  data continuity between `pnpm start` and the `.app` (verified: real synced
+  bank state served, not a fresh seed).
+- **A `node_modules` at a fileset's ROOT never ships — by design, and patterns
+  can't override it.** electron-builder's copy filter (app-builder-lib
+  `util/filter.js`) hard-rejects `relative === "node_modules"` before patterns
+  are consulted (hence `filter: ["**/*"]` doing nothing): builder manages the
+  app's own dependency closure itself and refuses to glob-copy a root
+  node*modules. The same source comment spells out the escape hatch — \_nested*
+  node_modules are deliberately allowed. Fix: root the extraResources fileset
+  one level ABOVE the deployed collector (`from: .build/resources`), so its
+  deps live at `collector/node_modules` — nested, shipped intact (verified,
+  plain copy, no hook). `scripts/after-pack.cjs` remains as a pure assert that
+  the secretspec `.node` made it, so re-rooting the fileset can never fail
+  silently again.
+- **`@trpc/server` must be a direct dependency.** `@trpc/client` imports it at
+  runtime (peer); pnpm satisfies it invisibly in dev, but the packaged
+  node_modules lacked it → the app died before its first log line. Symptom to
+  remember: a packaged Electron app that launches but stays silent with no
+  window is usually a main-entry module-load error (it surfaces as a GUI dialog,
+  not on stdout).
+- **Test-harness note:** the single-instance lock makes kill→relaunch cycles
+  flaky — lingering helper processes hold the lock for a few seconds and the
+  next launch exits instantly (silently). Not an app bug; wait for `pgrep` to
+  come up empty before relaunching.
+- Unsigned (`identity: null`) — fine for a local personal install; Gatekeeper
+  only gates downloaded apps. Developer-ID signing + notarization, an icon, and
+  auto-update remain open. The login item registers on first packaged launch
+  (`app.isPackaged` gate) and is visible in System Settings → Login Items.
+
 ## Notable gotcha (recorded so the next person doesn't lose an hour)
 
 **Do not top-level-`await app.whenReady()` in an ESM main entry.** With

@@ -58,6 +58,23 @@ export async function requestSync(): Promise<DashboardState> {
   return mapState(await trpc.sync.mutate());
 }
 
+/**
+ * Subscribe to live state pushed by the collector (SSE). `onState` fires with the
+ * current state on connect and again on every change — a poll commit (including a
+ * JMAP push) or a mutation — so the UI tracks the mailbox within a second instead
+ * of waiting for the fallback poll. Returns an unsubscribe function.
+ */
+export function subscribeState(
+  onState: (state: DashboardState) => void,
+  onError?: (err: unknown) => void,
+): () => void {
+  const sub = trpc.onStateChange.subscribe(undefined, {
+    onData: (wire) => onState(mapState(wire)),
+    onError,
+  });
+  return () => sub.unsubscribe();
+}
+
 /** Trigger an on-demand MoneyMoney sync (the bank card's sync button). */
 export async function requestBankSync(): Promise<DashboardState> {
   return mapState(await trpc.syncBank.mutate());
