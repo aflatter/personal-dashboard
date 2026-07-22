@@ -15,8 +15,29 @@
 #   userData dir from package.json "name", so the packaged app keeps reusing
 #   ~/Library/Application Support/@dash/desktop-electron (data continuity
 #   between `pnpm start` and the installed .app).
-# - identity: null — unsigned (local personal install; Gatekeeper only gates
-#   downloaded apps). Developer-ID signing + notarization are a later step.
+# - identity — signed with a LOCAL self-signed certificate, not Developer ID.
+#   Not for Gatekeeper (which only gates downloaded apps, and would reject this
+#   anyway): macOS binds both keychain ACLs and TCC grants to an app's code
+#   signature, so an unsigned build — ad-hoc re-signed on every package — looked
+#   like a different app each time and re-prompted for the MoneyMoney Automation
+#   grant and for the cookie-encryption key on every reinstall. A stable identity
+#   makes those approvals stick. Creating it, once:
+#
+#     openssl req -x509 -newkey rsa:2048 -sha256 -days 3650 -nodes \
+#       -keyout pd.key -out pd.crt -subj "/CN=Personal Dashboard Local/O=tevim/C=DE" \
+#       -addext "basicConstraints=critical,CA:false" \
+#       -addext "keyUsage=critical,digitalSignature" \
+#       -addext "extendedKeyUsage=critical,codeSigning"
+#     openssl pkcs12 -export -inkey pd.key -in pd.crt -out pd.p12 -name "Personal Dashboard Local"
+#     security import pd.p12 -k ~/Library/Keychains/login.keychain-db -T /usr/bin/codesign
+#     security add-trusted-cert -r trustRoot -p codeSign \
+#       -k ~/Library/Keychains/login.keychain-db pd.crt   # else find-identity says 0 valid
+#
+#   The key lives only in the login keychain and is deliberately NOT backed up:
+#   it is regenerable in seconds, nothing off this Mac trusts it, and the grants
+#   it preserves live in local databases that would not migrate anyway. A real
+#   Developer ID (worth backing up, and needed for notarization) is a drop-in
+#   replacement for the identity string below.
 appId: com.tevim.personal-dashboard
 productName: Personal Dashboard
 electronLanguages: [de, en]
@@ -50,18 +71,19 @@ afterPack: scripts/after-pack.cjs
 #   launchable build, so the unpacked layout after-pack.cjs still tolerates is
 #   debug-only — flip this off temporarily if you ever need it.
 # - enableEmbeddedAsarIntegrityValidation: deliberately OFF. It compares app.asar
-#   against hashes in Info.plist, but this build is unsigned (identity: null
-#   above), so nothing seals that Info.plist — an attacker who can rewrite the
-#   asar can rewrite the hash next to it, and the check buys ~nothing while
+#   against hashes in Info.plist, and the local self-signed identity does now
+#   seal that plist — but only against someone who can't also re-sign with the
+#   same local key, and it buys ~nothing while
 #   being a well-known cause of hard-to-diagnose launch failures on unsigned /
 #   ad-hoc-signed apps. Turn it on together with Developer-ID signing +
 #   notarization (the later step noted in the header comment).
-# - resetAdHocDarwinSignature: REQUIRED here. Flipping fuses rewrites bytes in
-#   the Electron Framework, which invalidates its linker-signed ad-hoc signature,
-#   and arm64 macOS refuses to load a binary whose signature does not verify.
-#   electron-builder normally re-signs right after flipping — but with
-#   identity: null it skips signing entirely, so without this the packaged app
-#   would be killed at launch. Drop it once real signing is configured.
+# - resetAdHocDarwinSignature: now OFF, and it must be. Flipping fuses rewrites
+#   bytes in the Electron Framework, invalidating its signature, and arm64 macOS
+#   refuses to load a binary whose signature does not verify. It was needed while
+#   identity: null made electron-builder skip signing entirely; now builder signs
+#   with the identity below right after flipping. Leaving it on would ad-hoc
+#   re-sign over that identity — which is exactly the every-build-is-a-new-app
+#   behaviour the identity exists to stop.
 electronFuses:
   runAsNode: false
   enableCookieEncryption: true
@@ -69,7 +91,7 @@ electronFuses:
   enableNodeCliInspectArguments: false
   enableEmbeddedAsarIntegrityValidation: false
   onlyLoadAppFromAsar: true
-  resetAdHocDarwinSignature: true
+  resetAdHocDarwinSignature: false
 mac:
   # Bundle icon (Finder/Dock of the installed .app). Master lives at
   # resources/icon/pulse-icon.svg; icon.icns is generated from Pulse.iconset via
@@ -79,7 +101,10 @@ mac:
   target:
     - target: dir
       arch: arm64
-  identity: null
+  # Must match a code-signing identity in the login keychain
+  # (`security find-identity -v -p codesigning`). See the header for how it was
+  # created; swap in a Developer ID here when there is one.
+  identity: Personal Dashboard Local
   category: public.app-category.productivity
   # Info.plist entries. electron-builder merges these into the plist it inherits
   # from the prebuilt Electron.app, then drops every key whose value is null —
