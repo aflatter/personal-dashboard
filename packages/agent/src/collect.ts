@@ -1,6 +1,6 @@
 import { buildBankSource } from "@dash/collector/bank";
+import type { BankConfig } from "@dash/collector/bank";
 import type { BankState } from "@dash/collector/contract";
-import type { Secrets } from "@dash/collector/secrets";
 
 /**
  * The backlog the agent collects on the Mac and pushes to the backend. `syncedAt`
@@ -23,8 +23,8 @@ export interface BankBacklog {
  * The `Source` port types `poll()`'s snapshot as `unknown`; here — at the one
  * place that knows it is the bank source — we read it as `BankState`.
  */
-export function bankCollector(secrets: Secrets): () => Promise<BankBacklog> {
-  const gate = buildBankSource(secrets);
+export function bankCollector(config: BankConfig): () => Promise<BankBacklog> {
+  const gate = buildBankSource(config);
   return async () => {
     if (!gate.source) throw new Error(gate.reason);
     const { snapshot } = await gate.source.poll();

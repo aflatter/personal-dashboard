@@ -14,7 +14,7 @@ describe("buildBankSource", () => {
   });
 
   it("constructs the source on macOS when the account is configured", () => {
-    const gate = buildBankSource({ moneyMoneyAccount: "DE00 0000 0000 0000 0000 00" });
+    const gate = buildBankSource({ account: "DE00 0000 0000 0000 0000 00" });
     if (process.platform === "darwin") {
       expect(gate.source?.id).toBe("bank");
     } else {

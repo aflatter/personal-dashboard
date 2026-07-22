@@ -16,8 +16,8 @@
 # through a pipe rather than a temp file.
 #
 # `registry` uses the deploy profile (the pull token); `backend` uses the backend
-# profile — the same set the collector loads locally. MONEYMONEY_ACCOUNT is never
-# sent to the cluster: MoneyMoney runs only on the Mac agent.
+# profile — the same set the collector loads locally. MoneyMoney needs nothing
+# here: no credential, and its account selector is Mac-app config, not a secret.
 set -euo pipefail
 
 NS="${NAMESPACE:-personal-dashboard}"

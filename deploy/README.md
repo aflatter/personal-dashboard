@@ -63,8 +63,11 @@ through the same `secretspec` used at runtime — the deploy-only token lives in
 separate `deploy` profile so the collector never resolves it. `secretspec run`
 injects values as environment variables, and `deploy/apply-secrets.sh` passes
 them to `kubectl` on **stdin only** — never as command-line arguments, since argv
-is readable by any local process via `ps`. `MONEYMONEY_ACCOUNT` is never sent to
-the cluster (MoneyMoney runs only on the Mac agent).
+is readable by any local process via `ps`. MoneyMoney appears nowhere in this
+picture: it needs no credential, and its account selector is Mac-app config
+(`moneyMoneyAccount` in `~/.config/personal-dashboard/config.json`), not a secret
+— so it is in neither the vault nor the cluster. The Mac agent pushes the backlog
+in over the tailnet instead.
 
 ## Deploy
 

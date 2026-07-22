@@ -13,15 +13,19 @@ describe("secretsFromEnv", () => {
       FASTMAIL_TOKEN_WORK: "w",
       TOGGL_API_TOKEN: "t",
       TOGGL_WORKSPACE_ID: "42",
-      MONEYMONEY_ACCOUNT: "DE00",
     });
     expect(secrets).toEqual({
       fastmailTokenPersonal: "p",
       fastmailTokenWork: "w",
       togglApiToken: "t",
       togglWorkspaceId: "42",
-      moneyMoneyAccount: "DE00",
     });
+  });
+
+  it("ignores MONEYMONEY_ACCOUNT — it is Mac-app config, not a secret", () => {
+    // A stray env var must not switch the loader into env mode either: doing so
+    // would make the backend think it had secrets and skip secretspec entirely.
+    expect(secretsFromEnv({ MONEYMONEY_ACCOUNT: "DE00" })).toBeNull();
   });
 
   it("switches to env mode on any one var, leaving the rest undefined", () => {

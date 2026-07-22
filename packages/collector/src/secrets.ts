@@ -14,15 +14,10 @@ export interface Secrets {
   fastmailTokenWork?: string;
   togglApiToken?: string;
   togglWorkspaceId?: string;
-  /**
-   * Which MoneyMoney account to read. Not auth — just a selector. IBAN preferred
-   * (unique + stable); MoneyMoney also accepts UUID / account number / name /
-   * group name. Required in secretspec, so present whenever the load succeeds;
-   * still typed optional because a failed load yields an empty {} (bank is then
-   * gated off by its `ready`).
-   */
-  moneyMoneyAccount?: string;
 }
+// MoneyMoney is absent by design: it needs no credential, and its account
+// selector is configuration of the Mac app, not a secret (see BankConfig in
+// ./bank.ts). Nothing MoneyMoney-related reaches the vault or the cluster.
 
 /** Each secret's environment-variable name (the secretspec field names). */
 const ENV: Record<keyof Secrets, string> = {
@@ -30,7 +25,6 @@ const ENV: Record<keyof Secrets, string> = {
   fastmailTokenWork: "FASTMAIL_TOKEN_WORK",
   togglApiToken: "TOGGL_API_TOKEN",
   togglWorkspaceId: "TOGGL_WORKSPACE_ID",
-  moneyMoneyAccount: "MONEYMONEY_ACCOUNT",
 };
 
 /**
@@ -83,7 +77,6 @@ export function loadSecrets(): Secrets {
       fastmailTokenWork: val("FASTMAIL_TOKEN_WORK"),
       togglApiToken: val("TOGGL_API_TOKEN"),
       togglWorkspaceId: val("TOGGL_WORKSPACE_ID"),
-      moneyMoneyAccount: val("MONEYMONEY_ACCOUNT"),
     };
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
