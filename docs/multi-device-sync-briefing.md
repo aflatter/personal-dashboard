@@ -1,6 +1,13 @@
 # Multi-device sync architecture — briefing & evaluation
 
-**Status:** decision briefing · **Date:** 2026-07-21 · **Branch:** `claude/multi-device-sync-arch-armp11`
+**Status:** **shipped — the design of record.** Merged to `main`; §7 (deployment)
+and §8 (module structure) describe what the repo actually does, not a proposal.
+**Evaluated:** 2026-07-21 (originally on `claude/multi-device-sync-arch-armp11`,
+since merged).
+
+§§1–6 are kept as-is: they are the evaluation that produced the decision, not a
+description of the system. §7 and §8 carry a **Shipped** note recording where the
+implementation differs from what was written here.
 
 This document frames the problem of getting dashboard data onto multiple devices
 (k8s, MacBook, iPhone), explains how the candidate foundations work, and rates
@@ -424,6 +431,33 @@ This section records the deployment design we settled on for the **traditional
 stack** (the §6 recommendation). It is private-by-construction: no public
 ingress, no app-side auth code, no CI runner, no standalone registry.
 
+> **Shipped.** This is live. The manifests are in `deploy/k8s/` (namespace →
+> PVC → Deployment → Service → Ingress), the image build is the repo-root
+> `Dockerfile`, and the workflow is the `justfile` (`build`/`push`/`deploy`/
+> `secrets`/`smoke`); see `deploy/README.md`. The URL is
+> `https://personal-dashboard.braid-stargazer.ts.net` — read the diagrams'
+> `collector.<tailnet>` as that host. `just smoke` (`/health` → 204 over HTTPS,
+> valid cert, tailnet-only) passes.
+>
+> Where the implementation differs from the sketch above:
+>
+> - **No Pulumi in the app repo.** §7.5/§7.6 assumed Pulumi stack references and
+>   `pulumi up`. In practice the app side is plain YAML plus `kubectl`, and the
+>   five platform constants are frozen literals (see `deploy/README.md`); Pulumi
+>   stayed on the platform side only.
+> - **Secrets are 1Password → `secretspec` → k8s `Secret`**, not 1Password →
+>   Pulumi: `just secrets` runs `deploy/apply-secrets.sh` under `secretspec run`,
+>   passing values to `kubectl` on stdin only. In the pod the backend reads them
+>   from **environment variables** (`secretsFromEnv`), so no secretspec and no
+>   1Password provider ship inside the container.
+> - **The `tailscale.com/expose` annotation became an `Ingress`** with
+>   `ingressClassName: tailscale` (+ `tailscale.com/hostname` and
+>   `tailscale.com/tags`) — same delegation, still zero Tailscale credentials in
+>   this repo.
+> - **Not yet shipped:** the PWA manifest + service worker listed in §7.5. The
+>   SPA is served same-origin over tailnet HTTPS and is reachable from the phone,
+>   but there is no web app manifest in the repo.
+
 ### 7.1 Target topology — everything on the tailnet
 
 ```
@@ -574,6 +608,22 @@ reuses the serving path already built for the Electron shell.
 The deployment split (backend vs. Mac agent) forces a module split, because
 otherwise the agent bundles the whole backend just to run one source. This
 section records the target package layout.
+
+> **Shipped.** The split is done: `@dash/collector` (acquisition only),
+> `@dash/backend` (store, state, sampler, scheduler, tRPC router, `bank.ts`'s
+> `pushBankBacklog`), `@dash/dashboard`, and the Mac agent — which did earn its
+> own package and tests, so it is **`@dash/agent`** rather than living inside the
+> Electron main process.
+>
+> Two details differ from the §8.3 table:
+>
+> - **`sources/sse.ts` stayed in `@dash/collector`.** It is the SSE _framing
+>   parser_ for the JMAP push stream — acquisition, not serving.
+> - **SPA serving landed as `backend/src/app-server.ts`** (`withSpa`: `/health`
+>   and `/api/*` to the backend, everything else the built SPA), with
+>   `backend/src/host.ts` (`createHostListener`) as the single entry for
+>   in-process embedders. The container and the Electron shell mount the same
+>   server.
 
 ### 8.1 The problem with today's `collector`
 

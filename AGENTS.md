@@ -79,10 +79,13 @@ packages/
                  `./time` · `./sources/{port,jmap,moneymoney,toggl}`.
   backend/       The always-on service (Node 26, .ts direct). Embeds @dash/collector;
                  owns day-bucketed history + durable state in node:sqlite; serves
-                 a tRPC API on 127.0.0.1 (loopback).
+                 a tRPC API, loopback by default (`COLLECTOR_HOST`/`COLLECTOR_PORT`;
+                 the container binds 0.0.0.0).
                  src/: trpc, router (the API), store/db, seed, state, scheduler,
                  bank (pushBankBacklog receiver), sync (transitional in-process
-                 bank sync), backend (createBackend factory), main (thin bin).
+                 bank sync), backend (createBackend factory), app-server (withSpa:
+                 same-origin SPA + /api mount), host (createHostListener, the
+                 embedder entry), main (thin bin).
                  Exports: `.` → AppRouter type · `./backend` → createBackend.
   agent/         The Mac push agent (Node library; runs in the Electron main
                  process). Embeds @dash/collector for the MoneyMoney source, and
@@ -97,10 +100,11 @@ packages/
                      view-models. Colocated *.test.ts.
       presentation/  Pure view primitives — Intl de-DE formatting + colour
                      palette (lighten/clientTint). NO React, no domain logic.
-      api/           trpc.ts (typed client) + client.ts (maps procedure results
-                     to domain shapes).
-      store/         useDashboard: fetch + poll the backend, run mutations,
-                     cache to localStorage. Exposed via DashboardContext.
+      api/           trpc.ts (typed client — splitLink routes subscriptions to
+                     httpSubscriptionLink/SSE, everything else to httpBatchLink)
+                     + client.ts (maps procedure results to domain shapes).
+      store/         useDashboard: subscribe to onStateChange, poll as a fallback,
+                     run mutations, cache to localStorage. Via DashboardContext.
       components/
         ui/          Presentational ONLY — props in, no store, no derivations.
         *.tsx        Container cards: read the store, call domain fns, render ui/.
@@ -124,6 +128,14 @@ Rules:
 - **The backend is the source of truth.** The SPA never owns data; it calls
   tRPC procedures (`state` query; `rentDone`/`taxDone`/`settings`/`sync`
   mutations, all returning fresh state). `localStorage` is only a render cache.
+- **State is pushed, not polled.** `onStateChange` (router.ts) is a tRPC
+  subscription served over SSE: it yields the current state, then re-yields on
+  every `change` the backend's bus emits — a committed poll (including a JMAP
+  push) or any mutation. So a mailbox change reaches every open client within a
+  second, and a push from the Mac reaches the phone without a re-read. Emit
+  `ctx.bus.emit("change")` from any new mutation. The client's 30s poll is only
+  the fallback for a dropped stream, and `signal` unwinds the listener when a
+  subscriber disconnects — don't add a second liveness mechanism.
 - **Collector sources are leaf modules** (the fourth dependency-direction rule,
   lint-enforced via `no-restricted-imports` in the root `vite.config.ts`): a
   file under `collector/src/sources/` imports only Node builtins, `sources/*`
@@ -144,15 +156,43 @@ Rules:
 install with `pnpm install --ignore-workspace`; its own `tsc --noEmit` is the
 typecheck — root `vp run -r` does not cover it). Boundaries:
 
-- **The shell owns no data.** It composes `createBackend()` in-process and
-  talks to it via `/api` like any other client (typed tRPC client, `AppRouter`
-  contract — never hand-written wire types). Data logic stays in the backend.
+- **The shell owns no data.** It runs the backend in-process and talks to it via
+  `/api` like any other client (typed tRPC client, `AppRouter` contract — never
+  hand-written wire types). Data logic stays in the backend.
+- **One embedder entry: `backend/src/host.ts`.** `createHostListener({ dbPath,
+distDir })` loads the secrets, composes `createBackend()`, and wraps it in the
+  same-origin SPA server (`withSpa`) — the exact server the container mounts.
+  The shell imports **only** this, and dynamically (from `backendDir`), because
+  the packaged .app carries a pnpm-deployed tree where `@dash/collector` resolves
+  through its own `node_modules`. Keep that tree's layout an implementation
+  detail: never reach into `backend.ts` / `app-server.ts` /
+  `@dash/collector/secrets` from the shell.
 - **The SPA must never require the preload bridge.** It stays a pure web client
   (works when any browser points at the backend URL); `window.desktop` is for
   desktop-only extras.
 - **Remind, don't auto-sync.** Shell duties may nudge (e.g. the bank-staleness
   notification), but side-effecting syncs stay user gestures — the gesture is
   the opt-in that scopes the macOS Automation/TCC prompt.
+
+## Deploy — k3s, tailnet-only
+
+- The always-on backend runs in **k3s**, reachable **only** over Tailscale at
+  `https://personal-dashboard.braid-stargazer.ts.net` — no public ingress and no
+  app-level auth, because the tailnet _is_ the auth. Don't add login code.
+- `deploy/k8s/` is applied in order: namespace → PVC → Deployment → Service →
+  Ingress (`ingressClassName: tailscale`, fulfilled by the operator the infra
+  repo installs; the app repo holds zero Tailscale credentials).
+- **Stateful singleton**: one replica, `strategy: Recreate`, ReadWriteOnce PVC —
+  the pod owns a SQLite file _and_ a long-lived JMAP push stream. Never scale it.
+- `Dockerfile` builds the image (`node:26-slim`; Node type-strips the backend's
+  `.ts`, so only the SPA is built). Built on the Mac with OrbStack using
+  `--platform linux/amd64` — the cluster is `x86_64`, the Mac is arm64.
+- `justfile` is the whole workflow: `just build` / `push` / `deploy` (apply, then
+  roll the Deployment to the git-sha tag) / `secrets` / `smoke` (`/health` → 204
+  over HTTPS) / `logs` / `restart`. Registry: `forgejo.tev.im`. Details and the
+  one-time setup live in `deploy/README.md`.
+- MoneyMoney never runs in the cluster (Linux), so `MONEYMONEY_ACCOUNT` is
+  deliberately absent from the cluster's secret set.
 
 ## Design principles
 
@@ -262,3 +302,15 @@ how the data layer evolved. Apply them when adding a source, a mutation, or stat
   `secretspec` Node SDK (`packages/collector/src/secrets.ts`) — configure the
   provider once with `secretspec config` (1Password), or override via
   `SECRETSPEC_PROVIDER`.
+- **Profiles are per deployable, and there is no `default`.** `app` = the Mac
+  agent's `MONEYMONEY_ACCOUNT`, `backend` = the Fastmail/Toggl runtime
+  credentials, `deploy` = the Forgejo pull token (deploy-time only, never
+  resolved at runtime). Select one with `SECRETSPEC_PROFILE`; `loadSecrets()`
+  falls back to `backend`. Adding a secret means adding it to the profile of the
+  deployable that needs it — not to a shared bag.
+- **Env short-circuits secretspec (the container path).** `secretsFromEnv()`
+  reads the secrets straight from `process.env`, and `loadSecrets()` returns them
+  before secretspec is ever consulted — that is how the pod gets its credentials
+  from a k8s Secret without shipping a 1Password provider. It returns `null` when
+  none are set, so local/dev falls through to secretspec unchanged. Keep it pure
+  over its `env` argument.
