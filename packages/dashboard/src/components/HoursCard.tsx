@@ -1,4 +1,4 @@
-import { hoursView } from "../domain";
+import { hoursView, sourceProblem } from "../domain";
 import { formatHours, formatMonth } from "../presentation";
 import { useDashboardStore } from "../store/DashboardContext";
 import { Card, ClientBlock } from "./ui";
@@ -8,6 +8,8 @@ export function HoursCard() {
   const { state, now } = useDashboardStore();
   const view = hoursView(state.clients);
   const monthLabel = formatMonth(now);
+  // Hours poll hourly, so a silent stop is invisible in the numbers themselves.
+  const problem = sourceProblem(state.meta.hours, now);
 
   return (
     <Card>
@@ -25,6 +27,7 @@ export function HoursCard() {
           <ClientBlock key={i} client={client} />
         ))}
       </div>
+      {problem ? <p className="text-[11px] text-status-overdue mt-3">{problem}</p> : null}
     </Card>
   );
 }

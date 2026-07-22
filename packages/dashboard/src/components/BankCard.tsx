@@ -1,4 +1,4 @@
-import { bankView } from "../domain";
+import { bankView, sourceProblem } from "../domain";
 import { formatDayMonth } from "../presentation";
 import { useDashboardStore } from "../store/DashboardContext";
 import { Card, CardHeader, Pill, StatNumber, SyncButton } from "./ui";
@@ -19,8 +19,9 @@ export function BankCard() {
   const view = bankView(state.bank, now);
   // A local collect failure (MoneyMoney locked) never reaches the backend, so it
   // is only in `bankError`; `meta.bank` carries what the backend last recorded.
-  const { ok, error: recordedError } = state.meta.bank;
-  const error = bankError ?? (ok ? null : recordedError);
+  // The bank has no staleness budget (it is pushed, not polled) — the pill above
+  // already reports its sync age — so `sourceProblem` here only surfaces errors.
+  const error = bankError ?? sourceProblem(state.meta.bank, now);
   const label =
     view.syncedAt === null ? "nie synchronisiert" : `Sync: ${formatDayMonth(view.syncedAt)}`;
 

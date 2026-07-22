@@ -56,6 +56,18 @@ export interface SourceStatus {
   ok: boolean;
   /** Present when the last poll failed (e.g. "MoneyMoney locked"). */
   error?: string;
+  /**
+   * How old `polledAt` may get before the data should be treated as stale (ms).
+   * Derived from the source's own polling cadence, so only the backend can say
+   * it — and only for sources it actually polls. Absent means "no cadence to
+   * judge against": the source is unconfigured, or it is pushed in rather than
+   * polled (the bank, whose staleness is its own sync-age rule).
+   *
+   * This exists because `ok` alone lies: a source that silently stopped being
+   * polled keeps its last `ok: true` forever, so the UI looked healthy while
+   * serving frozen data.
+   */
+  staleAfter?: number;
 }
 
 /** The full dashboard state (the `state` query's result). */

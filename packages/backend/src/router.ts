@@ -29,7 +29,7 @@ const bankBacklog = z.object({
  * dashboard's typed client infers from.
  */
 export const appRouter = router({
-  state: publicProcedure.query(({ ctx }) => buildState(ctx.db)),
+  state: publicProcedure.query(({ ctx }) => buildState(ctx.db, ctx.staleAfter)),
 
   // Live state: yields the current state immediately, then again every time the
   // change bus fires (a poll committed — including a JMAP push — or a mutation).
@@ -38,22 +38,22 @@ export const appRouter = router({
   // for the client's fallback poll. `on(..., { signal })` unwinds and drops the
   // listener when the subscriber disconnects (tRPC aborts the signal).
   onStateChange: publicProcedure.subscription(async function* ({ ctx, signal }) {
-    yield buildState(ctx.db);
+    yield buildState(ctx.db, ctx.staleAfter);
     for await (const _ of on(ctx.bus, "change", { signal })) {
-      yield buildState(ctx.db);
+      yield buildState(ctx.db, ctx.staleAfter);
     }
   }),
 
   rentDone: publicProcedure.input(doneInput).mutation(({ ctx, input }) => {
     ctx.db.addEvent("rent_done", input?.at ?? Date.now());
     ctx.bus.emit("change");
-    return buildState(ctx.db);
+    return buildState(ctx.db, ctx.staleAfter);
   }),
 
   taxDone: publicProcedure.input(doneInput).mutation(({ ctx, input }) => {
     ctx.db.addEvent("tax_done", input?.at ?? Date.now());
     ctx.bus.emit("change");
-    return buildState(ctx.db);
+    return buildState(ctx.db, ctx.staleAfter);
   }),
 
   settings: publicProcedure.input(settingsPatch).mutation(({ ctx, input }) => {
@@ -61,7 +61,7 @@ export const appRouter = router({
     if (!current) throw new Error("settings not initialised");
     ctx.db.putSettings({ ...current, ...input });
     ctx.bus.emit("change");
-    return buildState(ctx.db);
+    return buildState(ctx.db, ctx.staleAfter);
   }),
 
   // The inbox sync button: force a live JMAP fetch of every inbox, then return
@@ -72,7 +72,7 @@ export const appRouter = router({
   sync: publicProcedure.mutation(async ({ ctx }) => {
     await syncInboxesOnce(ctx.db, ctx.inboxes, Date.now());
     ctx.bus.emit("change");
-    return buildState(ctx.db);
+    return buildState(ctx.db, ctx.staleAfter);
   }),
 
   // The receive half of the push-only bank flow: the Mac agent collects the
@@ -85,7 +85,7 @@ export const appRouter = router({
     // Emit like every other mutation, so a push from the Mac reaches subscribed
     // clients (the phone) over the live stream instead of waiting for a re-read.
     ctx.bus.emit("change");
-    return buildState(ctx.db);
+    return buildState(ctx.db, ctx.staleAfter);
   }),
 });
 

@@ -31,14 +31,24 @@ function inbox(db: Db, source: SourceId, account: InboxAccount): InboxState {
   };
 }
 
-function status(db: Db, source: SourceId): SourceStatus {
+/**
+ * Per-source staleness budget, keyed by source id: how old a poll may get before
+ * the data is suspect. Only the composition point knows the cadences (they come
+ * from the registry's jobs), so it is passed in rather than guessed here.
+ */
+export type StaleAfter = Partial<Record<SourceId, number>>;
+
+function status(db: Db, source: SourceId, staleAfter: StaleAfter): SourceStatus {
   const snap = db.getSnapshot(source);
-  if (!snap) return { polledAt: null, ok: false, error: "never polled" };
-  return { polledAt: snap.fetchedAt, ok: snap.ok, error: snap.error };
+  const base: SourceStatus = snap
+    ? { polledAt: snap.fetchedAt, ok: snap.ok, error: snap.error }
+    : { polledAt: null, ok: false, error: "never polled" };
+  const budget = staleAfter[source];
+  return budget ? { ...base, staleAfter: budget } : base;
 }
 
 /** Assemble the full StateResponse from the tables. */
-export function buildState(db: Db): StateResponse {
+export function buildState(db: Db, staleAfter: StaleAfter = {}): StateResponse {
   const bank = db.getSnapshot<BankState>("bank");
   const hours = db.getSnapshot<{ clients: Client[] }>("hours");
   const settings = db.getSettings<Settings>();
@@ -55,10 +65,10 @@ export function buildState(db: Db): StateResponse {
     tax: { doneAt: db.latestEvent("tax_done") },
     settings,
     meta: {
-      "inbox:personal": status(db, "inbox:personal"),
-      "inbox:work": status(db, "inbox:work"),
-      bank: status(db, "bank"),
-      hours: status(db, "hours"),
+      "inbox:personal": status(db, "inbox:personal", staleAfter),
+      "inbox:work": status(db, "inbox:work", staleAfter),
+      bank: status(db, "bank", staleAfter),
+      hours: status(db, "hours", staleAfter),
     },
   };
 }

@@ -6,7 +6,11 @@ import type { Secrets } from "@dash/collector/secrets";
 import { appRouter } from "./router.ts";
 import { seed } from "./seed.ts";
 import { startScheduler } from "./scheduler.ts";
+import type { StaleAfter } from "./state.ts";
 import { Db } from "./store/db.ts";
+
+/** Consecutive missed polls before a source's data counts as stale. */
+const MISSED_CYCLES = 3;
 
 export interface BackendOptions {
   /** SQLite path (":memory:" works). Seeded on first run when empty. */
@@ -54,13 +58,22 @@ export function createBackend(opts: BackendOptions): Backend {
   const jobs = buildJobs(opts.secrets);
   startScheduler(db, jobs, () => bus.emit("change"));
 
+  // What "too old" means per source, derived from the cadence the job actually
+  // runs at — the API layer can then report staleness instead of leaving clients
+  // to guess. Missing MISSED_CYCLES polls in a row is not a blip: it means the
+  // source stopped running (or was never constructed, the failure mode that once
+  // served frozen inboxes for days while `ok` stayed true).
+  const staleAfter: StaleAfter = Object.fromEntries(
+    jobs.map((job) => [job.source.id, job.everyMs * MISSED_CYCLES]),
+  );
+
   // The inbox sources also back the inbox sync button's on-demand poll, so hand
   // them to the API context (only those actually configured are present).
   const inboxes = jobs.map((j) => j.source).filter((s) => s.id.startsWith("inbox:"));
 
   const trpcHandler = createHTTPHandler({
     router: appRouter,
-    createContext: () => ({ db, inboxes, bus }),
+    createContext: () => ({ db, inboxes, bus, staleAfter }),
   });
 
   // A plain /health route backs readiness probes (tRPC would 404 it).

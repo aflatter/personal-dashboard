@@ -1,6 +1,7 @@
 import type { EventEmitter } from "node:events";
 import { initTRPC } from "@trpc/server";
 import type { Source } from "@dash/collector/sources/port";
+import type { StaleAfter } from "./state.ts";
 import type { Db } from "./store/db.ts";
 
 /**
@@ -15,6 +16,8 @@ export interface Context {
   db: Db;
   inboxes: Source[];
   bus: EventEmitter;
+  /** Per-source staleness budgets, derived from the job cadences at boot. */
+  staleAfter: StaleAfter;
 }
 
 const t = initTRPC.context<Context>().create();
