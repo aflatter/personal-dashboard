@@ -30,6 +30,46 @@ extraMetadata:
 asar: true
 npmRebuild: false
 afterPack: scripts/after-pack.cjs
+# Electron fuses — build-time switches burnt into the Electron binary.
+#
+# They matter more here than in an ordinary Electron app because the installed
+# .app holds a macOS Automation (TCC) grant for MoneyMoney: macOS attaches that
+# consent to *this bundle*, not to the code inside it. With the default fuses,
+# anything that can run a process on this Mac can borrow the grant —
+#
+#   ELECTRON_RUN_AS_NODE=1 "…/Personal Dashboard.app/Contents/MacOS/Personal Dashboard" -e '<js>'
+#
+# — and drive Apple Events as us without ever asking the user. Disabling
+# runAsNode (plus NODE_OPTIONS and --inspect, the same trick by other means)
+# closes that path: the bundle can then only ever run its own main.js.
+#
+# - onlyLoadAppFromAsar: with the default search order (app.asar → app →
+#   default_app.asar) an attacker who can delete app.asar and drop an `app/`
+#   directory beside it gets code execution under the same TCC grant. This fuse
+#   makes app.asar the only entry point. Cost: `asar: false` no longer produces a
+#   launchable build, so the unpacked layout after-pack.cjs still tolerates is
+#   debug-only — flip this off temporarily if you ever need it.
+# - enableEmbeddedAsarIntegrityValidation: deliberately OFF. It compares app.asar
+#   against hashes in Info.plist, but this build is unsigned (identity: null
+#   above), so nothing seals that Info.plist — an attacker who can rewrite the
+#   asar can rewrite the hash next to it, and the check buys ~nothing while
+#   being a well-known cause of hard-to-diagnose launch failures on unsigned /
+#   ad-hoc-signed apps. Turn it on together with Developer-ID signing +
+#   notarization (the later step noted in the header comment).
+# - resetAdHocDarwinSignature: REQUIRED here. Flipping fuses rewrites bytes in
+#   the Electron Framework, which invalidates its linker-signed ad-hoc signature,
+#   and arm64 macOS refuses to load a binary whose signature does not verify.
+#   electron-builder normally re-signs right after flipping — but with
+#   identity: null it skips signing entirely, so without this the packaged app
+#   would be killed at launch. Drop it once real signing is configured.
+electronFuses:
+  runAsNode: false
+  enableCookieEncryption: true
+  enableNodeOptionsEnvironmentVariable: false
+  enableNodeCliInspectArguments: false
+  enableEmbeddedAsarIntegrityValidation: false
+  onlyLoadAppFromAsar: true
+  resetAdHocDarwinSignature: true
 mac:
   # Bundle icon (Finder/Dock of the installed .app). Master lives at
   # resources/icon/pulse-icon.svg; icon.icns is generated from Pulse.iconset via
@@ -41,3 +81,26 @@ mac:
       arch: arm64
   identity: null
   category: public.app-category.productivity
+  # Info.plist entries. electron-builder merges these into the plist it inherits
+  # from the prebuilt Electron.app, then drops every key whose value is null —
+  # which is the only way to get rid of Electron's own defaults.
+  #
+  # - NSAppleEventsUsageDescription is the key this app actually needs: without
+  #   it macOS never shows the Automation consent dialog for the osascript call
+  #   in packages/collector/src/sources/moneymoney.ts, and the Apple Event comes
+  #   back as -1743 (the "not permitted" branch of mapOsascriptError). The text
+  #   is shown verbatim in that dialog, so it is de-DE like the rest of the UI.
+  # - The null entries are Electron's own stock strings ("This app needs access
+  #   to the camera", …), inherited from the prebuilt Electron.app's Info.plist.
+  #   This app has no camera, microphone, audio-capture or Bluetooth code;
+  #   leaving them in only advertises permissions we would never ask for.
+  extendInfo:
+    NSAppleEventsUsageDescription: >-
+      Personal Dashboard steuert MoneyMoney, um die Anzahl der noch nicht
+      abgehakten Umsätze zu zählen und im Dashboard anzuzeigen. Nur diese Zahl
+      verlässt MoneyMoney; es werden keine Kontodaten verändert.
+    NSCameraUsageDescription: null
+    NSMicrophoneUsageDescription: null
+    NSAudioCaptureUsageDescription: null
+    NSBluetoothAlwaysUsageDescription: null
+    NSBluetoothPeripheralUsageDescription: null

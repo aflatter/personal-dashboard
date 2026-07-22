@@ -31,7 +31,7 @@
 //     Automation/TCC prompt never fires unattended.
 
 import { createTRPCClient, httpBatchLink } from "@trpc/client";
-import { app, BrowserWindow, ipcMain, Notification, powerMonitor } from "electron";
+import { app, BrowserWindow, ipcMain, Notification, powerMonitor, shell } from "electron";
 import type { BrowserWindow as BrowserWindowType } from "electron";
 import { readFile, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
@@ -94,6 +94,17 @@ ipcMain.handle("agent:refresh-bank", async (): Promise<RefreshResult> => {
 
 // --- Window -------------------------------------------------------------------
 
+const BACKEND_ORIGIN = new URL(BACKEND_URL).origin;
+
+/** Same origin as the backend the SPA is served from — compared parsed, never by prefix. */
+function isBackendOrigin(url: string): boolean {
+  try {
+    return new URL(url).origin === BACKEND_ORIGIN;
+  } catch {
+    return false; // unparseable (about:blank, a bare scheme) is never ours
+  }
+}
+
 async function createWindow(): Promise<BrowserWindowType> {
   const win = new BrowserWindow({
     width: 1280,
@@ -106,6 +117,45 @@ async function createWindow(): Promise<BrowserWindowType> {
       nodeIntegration: false, // no Node in the renderer
       sandbox: true,
     },
+  });
+
+  // This window loads a REMOTE origin and carries the `window.dashboardAgent`
+  // bridge (preload.js), i.e. a live handle on the MoneyMoney agent. contextIso-
+  // lation and the sandbox keep the renderer out of Node, but they say nothing
+  // about *which page* gets the bridge: one redirect or one link click and a
+  // foreign origin would inherit it. So pin the window to the backend origin.
+  //
+  // will-navigate covers in-page navigations (link clicks, location =), and
+  // will-redirect the server-side 30x hop that will-navigate never sees — an
+  // open redirect on the backend would otherwise land us elsewhere with the
+  // bridge still attached. Both compare parsed origins, not string prefixes.
+  const denyForeignNavigation = (event: { preventDefault: () => void }, url: string): void => {
+    if (isBackendOrigin(url)) return;
+    event.preventDefault();
+    console.warn(`[main] blocked navigation to ${url} (not ${BACKEND_ORIGIN})`);
+  };
+  win.webContents.on("will-navigate", denyForeignNavigation);
+  win.webContents.on("will-redirect", denyForeignNavigation);
+
+  // target=_blank / window.open: never open a second Electron window (it would
+  // get the same preload). External http(s) links go to the user's browser
+  // instead; any other scheme is dropped rather than handed to the OS opener,
+  // which would happily launch things far beyond a browser.
+  win.webContents.setWindowOpenHandler(({ url }) => {
+    let protocol: string;
+    try {
+      protocol = new URL(url).protocol;
+    } catch {
+      protocol = "";
+    }
+    if (protocol === "https:" || protocol === "http:") {
+      // Caught, not left dangling: an unhandled rejection here would take the
+      // whole main process — and with it the agent — down over a failed link.
+      void shell.openExternal(url).catch((err: unknown) => {
+        console.warn(`[main] opening ${url} externally failed:`, err);
+      });
+    } else console.warn(`[main] blocked window.open for ${url}`);
+    return { action: "deny" };
   });
 
   // Offline / backend down / tailnet asleep: keep retrying quietly. Ignore -3
