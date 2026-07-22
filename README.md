@@ -1,97 +1,104 @@
 # Persönliches Dashboard
 
-A calm, single-screen personal dashboard that surfaces a handful of recurring
-"is this taken care of?" facts, grouped into three life-area columns —
-**Persönlich**, **tevim GmbH**, **Immobilien**. All copy and number/date
-formatting is German (de-DE).
+A calm, single-screen personal dashboard that answers a handful of recurring
+"is this taken care of?" questions, grouped into three life-area columns —
+**Persönlich**, **tevim GmbH**, **Immobilien**. All copy, number and date
+formatting is German (de-DE); the code is English throughout.
 
 Widgets: two inboxes (Posteingang, with a two-series trend chart + week delta),
-the Spaßkonto bank backlog, the Mietbuchhaltung and Firmenbelege day-counters,
-and an Arbeitszeit hours breakdown.
+the bank review backlog, the **Mietbuchhaltung** and **Firmenbelege · Finanzamt**
+day-counters, and an **Arbeitszeit** breakdown of this month's billed hours by
+client → project.
 
-> This first milestone runs on **seeded mock data** persisted to
-> `localStorage`. Real integrations (IMAP/Exchange, MoneyMoney, time-tracking)
-> are intentionally out of scope — see `Data layer` below.
+The data is real. An always-on Node backend collects from Fastmail (JMAP),
+Toggl and MoneyMoney, keeps day-bucketed history in `node:sqlite`, and serves
+the SPA a typed tRPC API. (A fresh database is seeded once on first boot so the
+UI has something to render before the first poll lands.)
 
-## Toolchain
+## Packages
 
-- **[devenv.sh](https://devenv.sh)** manages system dependencies. It pins
-  **Node.js 26** (`nodejs-slim`) and **pnpm** from nixpkgs (`devenv.nix`). This
-  is the single owner of the runtime and package manager.
-- **[Vite+](https://viteplus.dev)** (`vp`) is the build/test/lint toolchain,
-  added as a local dev dependency and driven through `pnpm` scripts.
-  - Vite+'s **env feature is disabled**: its environment manager (`vp env`) can
-    install and shim a Node runtime globally, but here **devenv owns Node**, so
-    we run Vite+ in system-first mode. If you have Vite+ installed globally,
-    run `vp env off` once to prefer your system/devenv Node; because we only use
-    Vite+ as a local dependency invoked via devenv's Node, managed mode never
-    engages regardless.
-- **[Base UI](https://base-ui.com)** (`@base-ui/react`) provides the unstyled
-  foundational components (Button, Popover, Switch, NumberField).
-- **React 19 + TypeScript**, styled with **Tailwind CSS v4** (design tokens live
-  in `src/index.css` under `@theme`).
+A pnpm workspace, split by role:
 
-## Getting started
+| Package           | What it is                                                                                                                                                                                                            |
+| ----------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `@dash/collector` | **Acquisition library** — source adapters (JMAP/Fastmail, MoneyMoney, Toggl) behind a common `Source` port, the registry that configures them from secrets, the data contract, the secrets loader. No HTTP, no store. |
+| `@dash/backend`   | **The always-on service** — SQLite store, state assembly, day-bucket sampler, polling scheduler, tRPC router, and (in prod) the built SPA served same-origin.                                                         |
+| `@dash/dashboard` | **The SPA** — React 19 + Vite + Tailwind v4, a typed tRPC client. The backend's `AppRouter` _is_ the contract; no hand-written wire types.                                                                            |
+| `@dash/agent`     | **The Mac push agent** (library) — embeds `@dash/collector` for the MoneyMoney source and pushes the collected backlog to the backend's `pushBankBacklog`.                                                            |
+
+Plus `apps/desktop-electron/` — the macOS Electron shell. It lives **outside**
+the workspace (its own pnpm root; install with `pnpm install --ignore-workspace`)
+and runs the backend in-process, so the desktop app is the same SPA over a
+loopback origin.
+
+The collector/backend split exists so the Mac agent can embed one source without
+dragging in the store, the scheduler and the tRPC server. See
+`docs/multi-device-sync-briefing.md` §8.
+
+## Running locally
 
 ```bash
-devenv shell      # Node 26 (nodejs-slim) + pnpm from nixpkgs
+devenv shell      # Node 26 (nodejs-slim) + pnpm + secretspec + just + kubectl
 pnpm install
-pnpm dev          # vp dev  — http://localhost:5173
+devenv up         # backend on :4319, dashboard on :5173
 ```
+
+`devenv up` starts both processes: the backend waits for its `/health` probe,
+then the Vite dev server comes up and proxies `/api` → the backend. Ports are
+allocated upward from their base so parallel git worktrees don't collide.
+
+`pnpm dev` runs only the SPA; it expects a backend at `COLLECTOR_URL`
+(default `http://127.0.0.1:4319`).
 
 ### Scripts
 
-| Script           | What it does                           |
-| ---------------- | -------------------------------------- |
-| `pnpm dev`       | `vp dev` — dev server                  |
-| `pnpm build`     | `vp build` — production build          |
-| `pnpm preview`   | `vp preview` — serve the build         |
-| `pnpm test`      | `vp test` — domain unit tests (Vitest) |
-| `pnpm lint`      | `vp lint` — oxlint                     |
-| `pnpm typecheck` | `tsc --noEmit`                         |
+| Script           | What it does                                       |
+| ---------------- | -------------------------------------------------- |
+| `pnpm dev`       | `vp dev packages/dashboard` — SPA dev server       |
+| `pnpm build`     | `vp build packages/dashboard` — production build   |
+| `pnpm preview`   | `vp preview packages/dashboard` — serve the build  |
+| `pnpm test`      | `vp run -r test` — Vitest across packages          |
+| `pnpm lint`      | `vp lint` — oxlint                                 |
+| `pnpm format`    | `vp format` — oxfmt                                |
+| `pnpm typecheck` | `vp run -r typecheck` — `tsc --noEmit` per package |
 
-## Architecture
+## Secrets
 
-Visual/presentational components are kept separate from logic, with a pure
-domain model at the core:
+Secrets are declared in `secretspec.toml` and resolved at boot from 1Password
+via the `secretspec` Node SDK (`packages/collector/src/secrets.ts`) — nothing
+else touches the vault. One-time setup: `secretspec config`, then create a
+1Password item per declared secret.
 
+Three profiles, one per deployable — `app` (the Mac agent's
+`MONEYMONEY_ACCOUNT`), `backend` (the Fastmail and Toggl runtime credentials),
+and `deploy` (the Forgejo pull token, never loaded at runtime). There is
+deliberately no `default` profile; select one with `SECRETSPEC_PROFILE`.
+
+Sources degrade gracefully: a source whose secret is missing is simply skipped,
+and a failing poll marks only that source not-ok while the rest keep serving.
+
+## Deployment
+
+The backend runs in **k3s**, reachable **only** over Tailscale (no public
+ingress) at `https://personal-dashboard.braid-stargazer.ts.net` — the tailnet is
+the authentication, so there is no app-level auth. The image is built on the Mac
+(OrbStack, `--platform linux/amd64`) and pushed to a Forgejo registry at
+`forgejo.tev.im`.
+
+```sh
+just deploy      # build → push → apply deploy/k8s/ → roll the Deployment
+just smoke       # GET <url>/health → 204 over HTTPS
 ```
-src/
-  domain/        Pure TypeScript — the domain model. No React.
-                 entities (types.ts) + derivations (inbox, counter, rent, tax,
-                 bank, hours) + de-DE formatting. Fully unit-tested.
-  store/         useDashboard hook: seeded state, localStorage, actions
-                 (sync, markRent/Tax/Bank, settings) + a React context.
-  components/
-    ui/          Presentational only — props in, no store/derivations.
-    *.tsx        Container cards: read the store, call domain fns, render ui/.
-```
 
-- **Presentational** components (`components/ui/*`) import only React and domain
-  _types_ — never the store or derivation functions.
-- **Container** components (`InboxCard`, `BankCard`, `RentCard`, `TaxCard`,
-  `HoursCard`, …) read the store via `useDashboardStore()`, run domain
-  functions, and hand plain props to the presentational layer.
-- Functional components and composition throughout — no inheritance.
+In the cluster the backend reads its secrets from environment variables injected
+by a k8s Secret, so no secretspec and no 1Password provider ship inside the pod.
+Full instructions: `deploy/README.md`.
 
-### Data layer
+## Where to look next
 
-State is seeded mock data (`store/seed.ts`, mirroring the design prototype) and
-persisted to `localStorage`. To wire real sources, replace the data behind
-`useDashboard` (and the `sync`/`mark*` actions):
-
-- **Inboxes** — IMAP (personal) / Exchange (work); pull `total` + `unread` and
-  append a daily snapshot for the trend.
-- **Bank** — MoneyMoney's reviewed-transaction state.
-- **Hours** — the time-tracking system of record, grouped client → project.
-- **Rent / tax** — manual self-reported tasks; the actions set `lastDoneAt`.
-
-## Design notes
-
-- Built from the Claude Design handoff. Where `SPEC.md` and the final
-  prototype HTML disagreed (the day-counters), the **prototype** is the source
-  of truth: rent/tax render as **text-status cards** (no progress rings).
-- Hours use the de-DE decimal comma (`18,5 h`), per the handoff's "de-DE
-  formatting throughout" principle.
-- Configurable via the header ⚙ settings: due-soon / overdue thresholds and
-  whether the clock shows seconds.
+- **`AGENTS.md`** — the working contract: architecture boundaries, design
+  principles, conventions. Read this before changing code.
+- **`docs/multi-device-sync-briefing.md`** — the design of record for the
+  multi-device architecture (§7 deployment, §8 module structure).
+- **`docs/riffstack-infra-briefing.md`** — the platform-side handoff (Tailscale
+  operator, ACL, storage class) and the frozen constants it fixed.
