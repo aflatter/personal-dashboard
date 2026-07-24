@@ -9,6 +9,7 @@ export { SyncButton } from "./SyncButton";
 export { WeekDelta } from "./WeekDelta";
 export { StatNumber } from "./StatNumber";
 export { InboxChart } from "./InboxChart";
+export { InboxFlowChart } from "./InboxFlowChart";
 export { StackedBar } from "./StackedBar";
 export { ProjectRow } from "./ProjectRow";
 export { StatusSentence } from "./StatusSentence";

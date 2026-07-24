@@ -11,12 +11,34 @@ import type {
 } from "@dash/collector/contract";
 import type { Db } from "./store/db.ts";
 import type { InboxSnapshot } from "./seed.ts";
+import { flowBuckets } from "./store/db.ts";
+import { localDay } from "@dash/collector/time";
+
+/** How many days of per-day mail flow the widget shows (and we query). */
+const FLOW_DAYS = 14;
 
 function points(db: Db, source: SourceId, metric: string): DayPoint[] {
   return db.samples(source, metric).map((r) => ({ day: r.day, value: r.value }));
 }
 
-function inbox(db: Db, source: SourceId, account: InboxAccount): InboxState {
+/**
+ * The flow buckets for today, memoised on the calendar day. buildState runs on
+ * every state read *and* every change-bus emit (one per open tab per poll, and
+ * polls fire on every JMAP push), while the bounds only move at midnight —
+ * rebuilding them meant ~30–40 Intl.formatToParts calls per emit for an
+ * identical string.
+ */
+let cachedBuckets: { day: string; json: string } | undefined;
+
+function todaysBuckets(now: number): string {
+  const day = localDay(now);
+  if (cachedBuckets?.day !== day) {
+    cachedBuckets = { day, json: flowBuckets(now, FLOW_DAYS) };
+  }
+  return cachedBuckets.json;
+}
+
+function inbox(db: Db, source: SourceId, account: InboxAccount, buckets: string): InboxState {
   const snap = db.getSnapshot<InboxSnapshot>(source);
   if (!snap) throw new Error(`missing inbox snapshot: ${source}`);
   const { email, protocol, unread, total } = snap.data;
@@ -28,6 +50,8 @@ function inbox(db: Db, source: SourceId, account: InboxAccount): InboxState {
     total,
     unreadHistory: points(db, source, "unread"),
     totalHistory: points(db, source, "total"),
+    receivedHistory: db.flowByDay(source, "first_seen_at", buckets),
+    processedHistory: db.flowByDay(source, "departed_at", buckets),
   };
 }
 
@@ -54,10 +78,11 @@ export function buildState(db: Db, staleAfter: StaleAfter = {}): StateResponse {
   const settings = db.getSettings<Settings>();
   if (!bank || !hours || !settings) throw new Error("collector state not initialised");
 
+  const buckets = todaysBuckets(Date.now());
   return {
     inboxes: {
-      personal: inbox(db, "inbox:personal", "personal"),
-      work: inbox(db, "inbox:work", "work"),
+      personal: inbox(db, "inbox:personal", "personal", buckets),
+      work: inbox(db, "inbox:work", "work", buckets),
     },
     bank: bank.data,
     hours: { clients: hours.data.clients },

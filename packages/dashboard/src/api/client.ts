@@ -23,6 +23,8 @@ function toInbox(w: InboxState): Inbox {
     unread: w.unread,
     history: w.unreadHistory.map((p) => p.value),
     totalHistory: w.totalHistory.map((p) => p.value),
+    receivedHistory: w.receivedHistory.map((p) => p.value),
+    processedHistory: w.processedHistory.map((p) => p.value),
   };
 }
 

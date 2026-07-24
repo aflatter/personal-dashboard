@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildSeries, inboxView } from "./inbox";
+import { buildFlow, buildSeries, inboxView } from "./inbox";
 import type { Inbox } from "./types";
 
 function makeInbox(partial: Partial<Inbox>): Inbox {
@@ -11,6 +11,8 @@ function makeInbox(partial: Partial<Inbox>): Inbox {
     unread: 0,
     history: [],
     totalHistory: [],
+    receivedHistory: [],
+    processedHistory: [],
     ...partial,
   };
 }
@@ -30,16 +32,44 @@ describe("buildSeries", () => {
   });
 });
 
+describe("buildFlow", () => {
+  it("diverges received (up) and processed (down) from a shared midline", () => {
+    const flow = buildFlow([10, 5], [4, 8]);
+    expect(flow.max).toBe(10); // largest value across both series
+    // received bars sit above the midline (y + h reaches the midline)...
+    for (const b of flow.received) expect(b.y + b.h).toBeCloseTo(flow.mid, 5);
+    // ...processed bars start at the midline and drop below it.
+    for (const b of flow.processed) expect(b.y).toBe(flow.mid);
+    // the full-height bar (value === max) reaches the top of its half.
+    expect(flow.received[0].h).toBeGreaterThan(flow.received[1].h);
+  });
+
+  it("handles empty series without dividing by zero", () => {
+    const flow = buildFlow([], []);
+    expect(flow.received).toEqual([]);
+    expect(flow.processed).toEqual([]);
+    expect(flow.max).toBe(1);
+  });
+});
+
 describe("inboxView", () => {
   const inbox = makeInbox({
     total: 138,
     unread: 23,
     history: [22, 26, 21, 28, 24, 23, 27, 25, 29, 24, 23],
     totalHistory: [132, 136, 130, 138, 134, 133, 137, 135, 140, 138, 138],
+    receivedHistory: [12, 15, 9, 14],
+    processedHistory: [10, 13, 11, 12],
   });
 
   it("rounds axisMax up to the next 10 across total and totalHistory", () => {
     expect(inboxView(inbox).axisMax).toBe(140); // max series value is 140
+  });
+
+  it("surfaces today's received/processed as the latest flow points", () => {
+    const view = inboxView(inbox);
+    expect(view.received).toBe(14);
+    expect(view.processed).toBe(12);
   });
 
   it("computes the week delta vs ~7 days ago (index len-8)", () => {

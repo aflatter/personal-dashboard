@@ -29,14 +29,66 @@ export function buildSeries(values: number[], max: number): SeriesGeom {
   return { line, area, ex: last[0], ey: last[1] };
 }
 
+/** Diverging bar chart box (SVG user units): received rises from `mid`, processed drops. */
+const FLOW = { x0: 2, x1: 328, top: 3, mid: 30, bottom: 57 } as const;
+
+/** One bar as an SVG rect. */
+export interface BarRect {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
+
+export interface FlowGeom {
+  /** Received-per-day bars, rising from the midline. */
+  received: BarRect[];
+  /** Processed-per-day bars, dropping from the midline. */
+  processed: BarRect[];
+  /** Midline y (the shared baseline both series diverge from). */
+  mid: number;
+  /** The value mapped to a full half-height bar. */
+  max: number;
+}
+
+/**
+ * Project received/processed day series into a diverging bar chart: received
+ * bars grow up from the midline, processed bars grow down, both scaled to the
+ * same max so they read against each other. Same plot width as the level chart
+ * so the two align day-for-day.
+ */
+export function buildFlow(received: number[], processed: number[]): FlowGeom {
+  const { x0, x1, top, mid, bottom } = FLOW;
+  const n = Math.max(received.length, processed.length, 1);
+  const max = Math.max(1, ...received, ...processed);
+  const slot = (x1 - x0) / n;
+  const w = Math.max(1.5, slot * 0.56);
+  const bar = (v: number, i: number, up: boolean): BarRect => {
+    const cx = x0 + (i + 0.5) * slot;
+    const h = (Math.max(0, v) / max) * (up ? mid - top : bottom - mid);
+    return { x: round(cx - w / 2), y: round(up ? mid - h : mid), w: round(w), h: round(h) };
+  };
+  return {
+    received: received.map((v, i) => bar(v, i, true)),
+    processed: processed.map((v, i) => bar(v, i, false)),
+    mid,
+    max,
+  };
+}
+
 /** Direction of the week-over-week unread change (down = fewer unread = good). */
 export type DeltaDirection = "down" | "up" | "flat";
 
 export interface InboxView {
   unread: number;
   total: number;
+  /** Mail that entered the inbox today (latest received point). */
+  received: number;
+  /** Mail that left the inbox today (latest processed point). */
+  processed: number;
   unreadSeries: SeriesGeom;
   totalSeries: SeriesGeom;
+  flow: FlowGeom;
   axisMax: number;
   /** Signed change vs ~one week ago (negative = fewer unread = good). */
   delta: number;
@@ -57,11 +109,16 @@ export function inboxView(inbox: Inbox): InboxView {
   const delta = inbox.unread - unreadHistory[prevIndex];
   const deltaDirection: DeltaDirection = delta < 0 ? "down" : delta > 0 ? "up" : "flat";
 
+  const last = (xs: number[]) => (xs.length ? xs[xs.length - 1] : 0);
+
   return {
     unread: inbox.unread,
     total: inbox.total,
+    received: last(inbox.receivedHistory),
+    processed: last(inbox.processedHistory),
     unreadSeries: buildSeries(unreadHistory, axisMax),
     totalSeries: buildSeries(totalHistory, axisMax),
+    flow: buildFlow(inbox.receivedHistory, inbox.processedHistory),
     axisMax,
     delta,
     deltaDirection,

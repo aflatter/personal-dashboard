@@ -20,6 +20,14 @@ export interface InboxState {
   /** Unread per day (oldest → newest); the app accumulates this — the source only gives "now". */
   unreadHistory: DayPoint[];
   totalHistory: DayPoint[];
+  /**
+   * Per-day mail flow (Europe/Berlin days, oldest → newest). `received` = emails
+   * that entered the inbox that day; `processed` = emails that left it that day
+   * (archived/trashed/filed). So `received − processed` is the day's change in
+   * inbox size. Forward-only — observed live, not reconstructable from history.
+   */
+  receivedHistory: DayPoint[];
+  processedHistory: DayPoint[];
 }
 
 export interface BankState {

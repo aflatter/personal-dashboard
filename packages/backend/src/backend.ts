@@ -40,8 +40,19 @@ export interface Backend {
  */
 export function createBackend(opts: BackendOptions): Backend {
   const db = new Db(opts.dbPath);
+
+  // Poll real sources on their cadences (the registry skips any without a
+  // secret). MoneyMoney is not here and never will be: only a native Mac process
+  // can read it, so the Mac agent pushes it in via `pushBankBacklog`.
+  const jobs = buildJobs(opts.secrets);
+
   if (db.isEmpty()) {
-    seed(db, Date.now());
+    // Live inboxes (those we'll actually poll) get their prototype counts but no
+    // seeded flow log, so the first real poll baselines cleanly (see seedInbox).
+    const liveInboxes = new Set(
+      jobs.map((j) => j.source.id).filter((id) => id.startsWith("inbox:")),
+    );
+    seed(db, Date.now(), liveInboxes);
     console.log("seeded empty database");
   }
 
@@ -51,11 +62,7 @@ export function createBackend(opts: BackendOptions): Backend {
   const bus = new EventEmitter();
   bus.setMaxListeners(0);
 
-  // Poll real sources on their cadences (the registry skips any without a
-  // secret). MoneyMoney is not here and never will be: only a native Mac process
-  // can read it, so the Mac agent pushes it in via `pushBankBacklog`. Each
-  // committed poll (timer or JMAP push) pings the bus so live subscribers update.
-  const jobs = buildJobs(opts.secrets);
+  // Each committed poll (timer or JMAP push) pings the bus so live subscribers update.
   startScheduler(db, jobs, () => bus.emit("change"));
 
   // What "too old" means per source, derived from the cadence the job actually

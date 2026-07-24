@@ -66,10 +66,14 @@ async function openSession(token: string): Promise<Session> {
   };
 }
 
-async function inboxCounts(
-  session: Session,
-  token: string,
-): Promise<{ unread: number; total: number }> {
+interface InboxMailbox {
+  id: string;
+  unread: number;
+  total: number;
+}
+
+/** The inbox mailbox's id (for the id query) and its live unread/total counts. */
+async function inboxMailbox(session: Session, token: string): Promise<InboxMailbox> {
   const res = await fetch(session.apiUrl, {
     method: "POST",
     headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
@@ -89,13 +93,97 @@ async function inboxCounts(
   const body = (await res.json()) as {
     methodResponses: [
       string,
-      { list: Array<{ role: string | null; unreadEmails: number; totalEmails: number }> },
+      {
+        list: Array<{ id: string; role: string | null; unreadEmails: number; totalEmails: number }>;
+      },
       string,
     ][];
   };
   const inbox = body.methodResponses[0]?.[1]?.list.find((m) => m.role === "inbox");
   if (!inbox) throw new Error("JMAP: no inbox mailbox");
-  return { unread: inbox.unreadEmails, total: inbox.totalEmails };
+  return { id: inbox.id, unread: inbox.unreadEmails, total: inbox.totalEmails };
+}
+
+const PAGE = 256;
+// Position-based paging is only well-defined over a stable order, so ask for one
+// explicitly rather than relying on the server's default.
+const ID_SORT = [{ property: "receivedAt", isAscending: false }];
+// A partial id set is indistinguishable from mail having left, so a torn read
+// would post phantom departures. Restart instead — but bound it.
+const PAGE_ATTEMPTS = 3;
+
+/** One page of inbox ids, plus the query state it was read at. */
+async function inboxIdPage(
+  session: Session,
+  token: string,
+  inboxId: string,
+  position: number,
+): Promise<{ ids: string[]; queryState?: string }> {
+  const res = await fetch(session.apiUrl, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+    signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+    body: JSON.stringify({
+      using: [CORE_CAPABILITY, MAIL_CAPABILITY],
+      methodCalls: [
+        [
+          "Email/query",
+          {
+            accountId: session.accountId,
+            filter: { inMailbox: inboxId },
+            sort: ID_SORT,
+            position,
+            limit: PAGE,
+          },
+          "0",
+        ],
+      ],
+    }),
+  });
+  if (!res.ok) throw new Error(`JMAP Email/query HTTP ${res.status}`);
+  const [name, args] = (
+    (await res.json()) as {
+      methodResponses: [string, { ids?: string[]; queryState?: string }, string][];
+    }
+  ).methodResponses[0];
+  if (name !== "Email/query") throw new Error(`JMAP Email/query failed: ${JSON.stringify(args)}`);
+  return { ids: args.ids ?? [], queryState: args.queryState };
+}
+
+/**
+ * Every message id currently in the inbox, paged out of Email/query. The engine
+ * diffs this set against the stored one to record each message's arrival and
+ * departure (the per-day flow) — a count wouldn't do, we need identities.
+ *
+ * Correctness here matters more than it looks: a set that is short by one id is
+ * read downstream as "that message left the inbox". So we page until a short
+ * page (never inferring the end from a `total` the server may omit), and we
+ * abandon the read if `queryState` moves under us — mail arriving or leaving
+ * mid-page shifts every later position, which would otherwise skip an id.
+ */
+async function inboxIds(session: Session, token: string, inboxId: string): Promise<string[]> {
+  for (let attempt = 1; ; attempt++) {
+    const ids: string[] = [];
+    let seenState: string | undefined;
+    let torn = false;
+
+    for (let position = 0; ; position += PAGE) {
+      const { ids: page, queryState } = await inboxIdPage(session, token, inboxId, position);
+      // The collection changed between pages — positions no longer line up.
+      if (seenState !== undefined && queryState !== seenState) {
+        torn = true;
+        break;
+      }
+      seenState = queryState;
+      ids.push(...page);
+      if (page.length < PAGE) break; // a short page is the last one
+    }
+
+    if (!torn) return ids;
+    if (attempt >= PAGE_ATTEMPTS) {
+      throw new Error("JMAP Email/query: inbox kept changing while paging its ids");
+    }
+  }
 }
 
 /**
@@ -279,10 +367,12 @@ export function jmapInbox(id: SourceId, account: InboxAccount, cfg: JmapConfig):
     historyMetrics: ["unread", "total"],
     poll: async (): Promise<Poll> => {
       const session = await openSession(cfg.token);
-      const { unread, total } = await inboxCounts(session, cfg.token);
+      const { id, unread, total } = await inboxMailbox(session, cfg.token);
+      const inboxMembers = await inboxIds(session, cfg.token, id);
       return {
         metrics: { unread, total },
         snapshot: { account, email: session.email, protocol: "JMAP", unread, total },
+        inboxMembers,
       };
     },
     watch: (onChange) => startPush(cfg.token, id, onChange),

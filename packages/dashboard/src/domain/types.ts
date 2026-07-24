@@ -31,6 +31,10 @@ export interface Inbox {
   history: number[];
   /** Total count per day, same length as `history`. */
   totalHistory: number[];
+  /** Mail that entered the inbox per day (oldest → newest). */
+  receivedHistory: number[];
+  /** Mail that left the inbox per day (archived/trashed/filed), same days as `receivedHistory`. */
+  processedHistory: number[];
 }
 
 /** A reviewable bank account (Spaßkonto / MoneyMoney). */

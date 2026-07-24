@@ -6,6 +6,13 @@ export interface Poll {
   metrics: Record<string, number>;
   /** The current non-history state to persist (shape matches what `state.ts` reads). */
   snapshot: unknown;
+  /**
+   * The full set of message ids currently in the inbox, when the source tracks
+   * membership (JMAP). The engine diffs it against the stored set to record each
+   * message's arrival/departure (per-day flow); sources without a membership
+   * notion omit it.
+   */
+  inboxMembers?: string[];
 }
 
 /**
