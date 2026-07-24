@@ -11,27 +11,9 @@ import {
   subscribeState,
   type DashboardState,
 } from "../api/client";
+import { loadCache, saveCache } from "./cache";
 
-// Bump when the cached DashboardState shape changes so stale-shaped caches are dropped.
-const CACHE_KEY = "dashboard-cache-v2";
 const POLL_MS = 30_000;
-
-function loadCache(): DashboardState | null {
-  try {
-    const raw = localStorage.getItem(CACHE_KEY);
-    return raw ? (JSON.parse(raw) as DashboardState) : null;
-  } catch {
-    return null;
-  }
-}
-
-function saveCache(state: DashboardState): void {
-  try {
-    localStorage.setItem(CACHE_KEY, JSON.stringify(state));
-  } catch {
-    // Best-effort cache — ignore quota / unavailable storage.
-  }
-}
 
 export interface DashboardStore {
   state: DashboardState;
